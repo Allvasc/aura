@@ -45,6 +45,13 @@ const pairCodeText = document.getElementById('pair-code');
 const btnSimulateActivate = document.getElementById('btn-simulate-activate');
 const btnCloseAccount = document.getElementById('btn-close-account');
 
+// Configuração do Backend Render.com e WebSocket
+const RENDER_BACKEND_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3000' 
+  : 'https://aura-backend-render.onrender.com';
+
+let tvSocket = null;
+
 // Initial Setup
 document.addEventListener('DOMContentLoaded', () => {
   generatePairCode();
@@ -53,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFocusableElements();
   setupEventListeners();
   loadSavedApiKeys();
+  initTvSocket();
 });
 
 // Clock & Date Updates
@@ -475,12 +483,62 @@ function updateStatus(msg) {
   statusText.textContent = msg;
 }
 
+function initTvSocket() {
+  if (typeof io === 'undefined') return;
+
+  try {
+    tvSocket = io(RENDER_BACKEND_URL, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10
+    });
+
+    tvSocket.on('connect', () => {
+      console.log('⚡ Smart TV conectada ao Backend WebSocket:', RENDER_BACKEND_URL);
+      if (currentDeviceCode) {
+        tvSocket.emit('join-room', { deviceCode: currentDeviceCode });
+      }
+    });
+
+    // Evento: Celular envia Chaves de API atualizadas
+    tvSocket.on('keys-updated', (data) => {
+      console.log('🔑 Recebidas novas chaves via Celular:', data);
+      if (data.geminiKey) localStorage.setItem('key_gemini', data.geminiKey);
+      if (data.chatgptKey) localStorage.setItem('key_chatgpt', data.chatgptKey);
+      if (data.claudeKey) localStorage.setItem('key_claude', data.claudeKey);
+      if (data.activeProvider) {
+        currentProvider = data.activeProvider;
+        localStorage.setItem('aura_active_provider', currentProvider);
+        updateProviderBadge();
+        syncProviderChoiceButtons();
+      }
+      loadSavedApiKeys();
+      updateStatus('✨ Chaves da API sincronizadas com o seu celular!');
+    });
+
+    // Evento: Celular envia Pergunta / Prompt direto para a TV
+    tvSocket.on('prompt-received', (data) => {
+      console.log('💬 Recebido prompt via Celular:', data);
+      if (data.prompt) {
+        queryInput.value = data.prompt;
+        if (data.provider) {
+          currentProvider = data.provider;
+          updateProviderBadge();
+        }
+        handleQuery(data.prompt);
+      }
+    });
+  } catch (e) {
+    console.log('Erro ao inicializar WebSocket na TV:', e);
+  }
+}
+
 // Modais Handlers
 function openMobileModal() {
   closeAllModals();
-  const remoteUrl = `https://aura-ia.app/keys?device=${currentDeviceCode}`;
-  if (mobileUrlLabel) mobileUrlLabel.textContent = `aura-ia.app/keys?device=${currentDeviceCode}`;
-  qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(remoteUrl)}`;
+  const cleanUrlHost = RENDER_BACKEND_URL.replace('https://', '').replace('http://', '');
+  const remoteUrl = `${RENDER_BACKEND_URL}/connect?device=${currentDeviceCode}`;
+  if (mobileUrlLabel) mobileUrlLabel.textContent = `${cleanUrlHost}/connect?device=${currentDeviceCode}`;
+  qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(remoteUrl)}`;
   mobileModal.classList.remove('hidden');
   setupFocusableElements();
 }

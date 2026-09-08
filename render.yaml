@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: aura-backend
+    env: node
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: server
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
