@@ -3,6 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchInstalledTVApps, speakLunaNative, stopLunaNativeTTS } from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
 import AuraButton from '../components/AuraButton';
+import ConfigModal from '../components/ConfigModal';
+
+const readLS = (k, fallback = '') => {
+  try { return window.localStorage.getItem(k) || fallback; } catch { return fallback; }
+};
+const writeLS = (k, v) => {
+  try { window.localStorage.setItem(k, v); } catch { /* indisponivel */ }
+};
 
 const PROVIDERS = [
   ['gemini', 'Google Gemini'],
@@ -25,13 +33,26 @@ const fmtClock = () => {
 
 const MainPanel = () => {
   const [query, setQuery] = useState('');
-  const [provider, setProvider] = useState('gemini');
+  const [provider, setProvider] = useState(() => readLS('aura_active_provider', 'gemini'));
   const [status, setStatus] = useState('Pronto! Faça uma pergunta por voz ou escolha um atalho abaixo...');
   const [orbState, setOrbState] = useState('idle');
   const [response, setResponse] = useState(null);
   const [clock, setClock] = useState(fmtClock());
+  const [showConfig, setShowConfig] = useState(false);
 
   const recognitionRef = useRef(null);
+
+  const hasKey = (p) => !!readLS(`key_${p}`);
+
+  const changeProvider = useCallback((id) => {
+    setProvider(id);
+    writeLS('aura_active_provider', id);
+  }, []);
+
+  const closeConfig = useCallback((saved) => {
+    setShowConfig(false);
+    if (saved) setStatus('Chaves salvas! Já pode fazer perguntas.');
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setClock(fmtClock()), 1000);
@@ -49,6 +70,12 @@ const MainPanel = () => {
   const handleSend = useCallback(async (textToSend) => {
     const q = (textToSend || query || '').trim();
     if (!q) return;
+
+    if (!hasKey(provider)) {
+      setStatus(`Configure a chave do ${activeProviderName} para começar.`);
+      setShowConfig(true);
+      return;
+    }
 
     setResponse(null);
     setOrbState('thinking');
@@ -131,7 +158,12 @@ const MainPanel = () => {
           <h1>AURA</h1>
           <span className="aura-badge">{activeProviderName.split(' ').pop()}</span>
         </div>
-        <div className="aura-clock">{clock}</div>
+        <div className="aura-header-right">
+          <AuraButton className="pill" onClick={() => setShowConfig(true)}>
+            Chaves / IAs
+          </AuraButton>
+          <div className="aura-clock">{clock}</div>
+        </div>
       </header>
 
       {/* ---------- Conteúdo ---------- */}
@@ -180,7 +212,7 @@ const MainPanel = () => {
               key={id}
               className="pill"
               active={provider === id}
-              onClick={() => setProvider(id)}
+              onClick={() => changeProvider(id)}
             >
               {name}
             </AuraButton>
@@ -203,6 +235,8 @@ const MainPanel = () => {
       <footer className="aura-footer">
         🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Provedores
       </footer>
+
+      {showConfig && <ConfigModal onClose={closeConfig} />}
     </div>
   );
 };
