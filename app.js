@@ -48,7 +48,7 @@ const btnCloseAccount = document.getElementById('btn-close-account');
 // Configuração do Backend Render.com e WebSocket
 const RENDER_BACKEND_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3000' 
-  : 'https://aura-backend-render.onrender.com';
+  : 'https://aura-backend-gwiv.onrender.com';
 
 let tvSocket = null;
 
@@ -222,44 +222,82 @@ function setupEventListeners() {
 }
 
 // Voice Recognition (Web Speech Recognition API)
+let activeRecognition = null;
+
 function toggleVoiceRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    updateStatus('Seu controle/navegador não suporta ditado por voz direto. Use a digitação.');
+    updateStatus('Seu controle ou navegador não possui ditado direto. Use a digitação ou o celular.');
     return;
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'pt-BR';
-  recognition.continuous = false;
-  recognition.interimResults = false;
-
-  recognition.onstart = () => {
-    isListening = true;
-    setOrbState('listening');
-    updateStatus('🎙️ Ouvindo você... Fale agora!');
-  };
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    queryInput.value = transcript;
-    updateStatus(`Você disse: "${transcript}"`);
-    handleQuery(transcript);
-  };
-
-  recognition.onerror = () => {
+  if (isListening && activeRecognition) {
+    try {
+      activeRecognition.stop();
+    } catch (e) {}
     isListening = false;
     setOrbState('idle');
-    updateStatus('Não entendi bem. Tente novamente ou use os atalhos!');
-  };
+    updateMicButtonState(false);
+    updateStatus('Ditado interrompido. Faça uma pergunta ou escolha um atalho.');
+    return;
+  }
 
-  recognition.onend = () => {
+  try {
+    activeRecognition = new SpeechRecognition();
+    activeRecognition.lang = 'pt-BR';
+    activeRecognition.continuous = false;
+    activeRecognition.interimResults = false;
+
+    activeRecognition.onstart = () => {
+      isListening = true;
+      updateMicButtonState(true);
+      setOrbState('listening');
+      updateStatus('Ouvindo você... Fale agora!');
+    };
+
+    activeRecognition.onresult = (event) => {
+      isListening = false;
+      updateMicButtonState(false);
+      const transcript = event.results[0][0].transcript;
+      queryInput.value = transcript;
+      updateStatus(`Você disse: "${transcript}"`);
+      handleQuery(transcript);
+    };
+
+    activeRecognition.onerror = (err) => {
+      console.log('Voice error:', err);
+      isListening = false;
+      updateMicButtonState(false);
+      setOrbState('idle');
+      updateStatus('Não foi possível ouvir. Tente novamente ou use os atalhos!');
+    };
+
+    activeRecognition.onend = () => {
+      isListening = false;
+      updateMicButtonState(false);
+      if (!isSpeaking) setOrbState('idle');
+    };
+
+    activeRecognition.start();
+  } catch (err) {
+    console.error('Speech recognition exception:', err);
     isListening = false;
-    if (!isSpeaking) setOrbState('idle');
-  };
+    updateMicButtonState(false);
+    setOrbState('idle');
+    updateStatus('Erro ao ativar microfone.');
+  }
+}
 
-  recognition.start();
+function updateMicButtonState(listening) {
+  if (!btnMic) return;
+  if (listening) {
+    btnMic.innerHTML = `<svg class="ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span>Parar</span>`;
+    btnMic.classList.add('mic-active');
+  } else {
+    btnMic.innerHTML = `<svg class="ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg><span>Falar</span>`;
+    btnMic.classList.remove('mic-active');
+  }
 }
 
 // Multi-AI Dispatcher (Gemini, ChatGPT, Claude)
@@ -277,7 +315,7 @@ async function handleQuery(query) {
   if (currentProvider === 'chatgpt') providerName = 'OpenAI ChatGPT';
   if (currentProvider === 'claude') providerName = 'Anthropic Claude';
 
-  updateStatus(`✨ O Aura IA está consultando o ${providerName}...`);
+  updateStatus(`O Aura IA está consultando o ${providerName}...`);
 
   let reply = '';
   try {
@@ -299,7 +337,7 @@ async function handleQuery(query) {
 async function fetchGemini(query) {
   const apiKey = localStorage.getItem('key_gemini');
   if (!apiKey) {
-    return "Para usar o Google Gemini, por favor insira sua chave da API do Gemini no botão ⚙️ Keys no topo da tela ou pelo celular!";
+    return "Para usar o Google Gemini, por favor insira sua chave da API do Gemini no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
@@ -325,7 +363,7 @@ async function fetchGemini(query) {
 async function fetchChatGPT(query) {
   const apiKey = localStorage.getItem('key_chatgpt');
   if (!apiKey) {
-    return "Para usar o OpenAI ChatGPT, por favor insira sua chave da API da OpenAI no botão ⚙️ Keys no topo da tela ou pelo celular!";
+    return "Para usar o OpenAI ChatGPT, por favor insira sua chave da API da OpenAI no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -354,7 +392,7 @@ async function fetchChatGPT(query) {
 async function fetchClaude(query) {
   const apiKey = localStorage.getItem('key_claude');
   if (!apiKey) {
-    return "Para usar o Anthropic Claude, por favor insira sua chave da API da Anthropic no botão ⚙️ Keys no topo da tela ou pelo celular!";
+    return "Para usar o Anthropic Claude, por favor insira sua chave da API da Anthropic no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {

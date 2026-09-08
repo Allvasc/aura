@@ -490,9 +490,18 @@ body {
   color: var(--accent-cyan);
 }
 
+.ui-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
 .audio-controls {
   display: flex;
-  gap: 10px;
+  gap: 18px;
 }
 
 .response-body {
