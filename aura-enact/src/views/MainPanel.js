@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Scroller from '@enact/ui/Scroller';
 
 import {
   fetchInstalledTVApps,
   getDeviceInfo,
   isWebOS,
-  speakLunaNative,
-  stopLunaNativeTTS
+  showNativeToast
 } from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
+import { formatMarkdown } from '../services/format';
+import { speak, stopSpeech, unlockAudio } from '../services/speech';
 import AuraButton from '../components/AuraButton';
 import ConfigModal from '../components/ConfigModal';
+import ProviderIcon from '../components/ProviderIcon';
 
 const readLS = (k, fallback = '') => {
   try { return window.localStorage.getItem(k) || fallback; } catch { return fallback; }
@@ -19,9 +22,9 @@ const writeLS = (k, v) => {
 };
 
 const PROVIDERS = [
-  ['gemini', 'Google Gemini'],
-  ['chatgpt', 'OpenAI ChatGPT'],
-  ['claude', 'Anthropic Claude']
+  ['gemini', 'Google Gemini', 'Gemini'],
+  ['chatgpt', 'OpenAI ChatGPT', 'ChatGPT'],
+  ['claude', 'Anthropic Claude', 'Claude']
 ];
 
 const SHORTCUTS = [
@@ -37,9 +40,12 @@ const fmtClock = () => {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 
+const providerLabel = (id) => (PROVIDERS.find((p) => p[0] === id) || PROVIDERS[0])[1];
+const providerShort = (id) => (PROVIDERS.find((p) => p[0] === id) || PROVIDERS[0])[2];
+
 const MainPanel = () => {
   const [query, setQuery] = useState('');
-  const [provider, setProvider] = useState(() => readLS('aura_active_provider', 'gemini'));
+  const [provider, setProviderState] = useState(() => readLS('aura_active_provider', 'gemini'));
   const [status, setStatus] = useState('Pronto! Faça uma pergunta por voz ou escolha um atalho abaixo...');
   const [orbState, setOrbState] = useState('idle');
   const [response, setResponse] = useState(null);
@@ -48,134 +54,198 @@ const MainPanel = () => {
   const [device, setDevice] = useState(null);
 
   const recognitionRef = useRef(null);
+  const watchdogRef = useRef(null);
+  const responseRef = useRef(null);
+  const providerRef = useRef(provider);
   const showConfigRef = useRef(showConfig);
+  // refs de handlers usados no listener global de teclas (registrado 1x)
+  const keyActions = useRef({});
+  providerRef.current = provider;
   showConfigRef.current = showConfig;
 
   const hasKey = (p) => !!readLS(`key_${p}`);
 
-  const changeProvider = useCallback((id) => {
-    setProvider(id);
+  const setProvider = useCallback((id) => {
+    setProviderState(id);
     writeLS('aura_active_provider', id);
   }, []);
 
-  const closeConfig = useCallback((saved) => {
-    setShowConfig(false);
-    if (saved) setStatus('Chaves salvas! Já pode fazer perguntas.');
-  }, []);
+  const onOrbState = useCallback((s) => setOrbState(s), []);
 
-  useEffect(() => {
-    const t = setInterval(() => setClock(fmtClock()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // webOS: info do dispositivo, apps instalados e tecla BACK do controle
-  useEffect(() => {
-    getDeviceInfo((info) => {
-      setDevice(info);
-      console.log('webOS device:', info);
-    });
-
-    fetchInstalledTVApps((apps, summary) => {
-      console.log(`webOS: ${apps.length} apps na TV`, summary);
-    });
-
-    // BACK (461 no controle LG) / Esc: fecha o modal; senao deixa o SO sair do app
-    const onKey = (ev) => {
-      if (ev.keyCode === 461 || ev.key === 'Escape' || ev.key === 'GoBack') {
-        if (showConfigRef.current) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          setShowConfig(false);
-        }
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
-
-  const activeProviderName = PROVIDERS.find((p) => p[0] === provider)[1];
-
+  // --- envio de pergunta ------------------------------------------------
   const handleSend = useCallback(async (textToSend) => {
-    const q = (textToSend || query || '').trim();
+    const q = (textToSend || '').trim();
     if (!q) return;
+    const p = providerRef.current;
 
-    if (!hasKey(provider)) {
-      setStatus(`Configure a chave do ${activeProviderName} para começar.`);
+    if (!hasKey(p)) {
+      setStatus(`Configure a chave do ${providerLabel(p)} para começar.`);
       setShowConfig(true);
       return;
     }
 
+    stopSpeech();
     setResponse(null);
     setOrbState('thinking');
-    setStatus('Consultando a inteligência artificial...');
+    setStatus(`O Aura IA está consultando o ${providerLabel(p)}...`);
 
     try {
-      const res = await fetchAIResponse(provider, q);
+      const res = await fetchAIResponse(p, q);
       setResponse(res);
       setOrbState('speaking');
-      setStatus(`✨ Resposta gerada via ${res.providerName}`);
-
-      speakLunaNative(res.text, (ok) => {
-        if (!ok && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
-          const u = new window.SpeechSynthesisUtterance(res.text.replace(/[*_#`~]/g, ''));
-          u.lang = 'pt-BR';
-          u.onend = () => setOrbState('idle');
-          window.speechSynthesis.speak(u);
-        }
-      });
+      setStatus(`✨ Resposta gerada via ${res.providerName}!`);
+      speak(res.text, { onStateChange: onOrbState });
     } catch (err) {
-      setStatus('Ops! Não consegui falar com a inteligência artificial agora.');
+      setStatus(`Ops! Problema ao conectar com o ${providerLabel(p)}. Verifique a chave da API ou a internet.`);
       setOrbState('idle');
     }
-  }, [provider, query]);
+  }, [onOrbState]);
+
+  const ask = useCallback(() => handleSend(query), [handleSend, query]);
+
+  const replaySpeech = useCallback(() => {
+    if (response && response.text) {
+      setOrbState('speaking');
+      speak(response.text, { onStateChange: onOrbState });
+    }
+  }, [response, onOrbState]);
 
   const handleStopSpeech = useCallback(() => {
-    stopLunaNativeTTS();
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    stopSpeech();
     setOrbState('idle');
   }, []);
 
-  const handleMic = useCallback(() => {
+  const clearAll = useCallback(() => {
+    stopSpeech();
+    setQuery('');
+    setResponse(null);
+    setOrbState('idle');
+    setStatus('Limpo! Escolha um atalho ou faça uma nova pergunta.');
+  }, []);
+
+  // --- reconhecimento de voz -----------------------------------------
+  const stopListening = useCallback(() => {
+    if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch (e) { /* ignora */ }
+      recognitionRef.current = null;
+    }
+    setOrbState((s) => (s === 'listening' ? 'idle' : s));
+  }, []);
+
+  const toggleVoice = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setStatus('Reconhecimento de voz não disponível nesta TV. Digite sua pergunta.');
+      setStatus('Ditado por voz indisponível nesta TV. Digite a pergunta ou use o celular.');
       return;
     }
     if (recognitionRef.current) {
-      recognitionRef.current.abort();
-      recognitionRef.current = null;
-      setOrbState('idle');
+      stopListening();
+      setStatus('Ditado interrompido.');
       return;
     }
 
     const rec = new SR();
     rec.lang = 'pt-BR';
+    rec.continuous = false;
     rec.interimResults = false;
-    rec.maxAlternatives = 1;
     recognitionRef.current = rec;
 
-    const watchdog = setTimeout(() => rec.abort(), 10000);
-
-    setOrbState('listening');
-    setStatus('Ouvindo... pode falar!');
-
+    rec.onstart = () => {
+      setOrbState('listening');
+      setStatus('Ouvindo você... fale agora!');
+      watchdogRef.current = setTimeout(() => {
+        stopListening();
+        setStatus('Nenhum áudio detectado. Tente de novo ou use a digitação.');
+      }, 10000);
+    };
     rec.onresult = (ev) => {
-      const text = ev.results[0][0].transcript;
-      setQuery(text);
-      handleSend(text);
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      const transcript = ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript;
+      recognitionRef.current = null;
+      if (transcript) {
+        setQuery(transcript);
+        setStatus(`Você disse: "${transcript}"`);
+        handleSend(transcript);
+      } else {
+        setOrbState('idle');
+      }
     };
     rec.onerror = () => {
-      setStatus('Não entendi. Tente novamente.');
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      recognitionRef.current = null;
       setOrbState('idle');
+      setStatus('Não consegui captar o áudio. Tente novamente ou digite.');
     };
     rec.onend = () => {
-      clearTimeout(watchdog);
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
       recognitionRef.current = null;
-      if (orbState === 'listening') setOrbState('idle');
+      setOrbState((s) => (s === 'listening' ? 'idle' : s));
     };
 
-    rec.start();
-  }, [handleSend, orbState]);
+    try { rec.start(); } catch (e) { recognitionRef.current = null; }
+  }, [handleSend, stopListening]);
+
+  // --- relógio -------------------------------------------------------
+  useEffect(() => {
+    const t = setInterval(() => setClock(fmtClock()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // --- webOS: device, apps, teclas do controle ---------------------
+  useEffect(() => {
+    getDeviceInfo((info) => { setDevice(info); console.log('webOS device:', info); });
+    fetchInstalledTVApps((apps, summary) => console.log(`webOS: ${apps.length} apps`, summary));
+
+    const unlockOnce = () => {
+      unlockAudio();
+      window.removeEventListener('keydown', unlockOnce);
+      window.removeEventListener('click', unlockOnce);
+    };
+    window.addEventListener('keydown', unlockOnce);
+    window.addEventListener('click', unlockOnce);
+
+    const onKey = (ev) => {
+      const a = keyActions.current;
+      const k = ev.key;
+      const c = ev.keyCode;
+      // Botões coloridos do controle LG
+      if (k === 'ColorF0Red' || c === 403) { a.clear(); return; }
+      if (k === 'ColorF1Green' || c === 404) { a.voice(); return; }
+      if (k === 'ColorF2Yellow' || c === 405) { a.replay(); return; }
+      if (k === 'ColorF3Blue' || c === 406) { setShowConfig(true); return; }
+      // Teclas de mídia
+      if (k === 'MediaPlay' || c === 415) { a.replay(); return; }
+      if (k === 'MediaPause' || k === 'MediaStop' || c === 413 || c === 19) { a.stop(); return; }
+      // Voltar
+      if (k === 'GoBack' || k === 'Escape' || c === 461) {
+        if (showConfigRef.current) { ev.preventDefault(); ev.stopPropagation(); setShowConfig(false); }
+        else { a.stop(); }
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keydown', unlockOnce);
+      window.removeEventListener('click', unlockOnce);
+    };
+  }, []);
+
+  // mantem os handlers atuais acessiveis ao listener global
+  keyActions.current = {
+    clear: clearAll,
+    voice: toggleVoice,
+    replay: replaySpeech,
+    stop: handleStopSpeech
+  };
+
+  const closeConfig = useCallback((saved) => {
+    setShowConfig(false);
+    if (saved) {
+      setStatus('Chaves salvas! Já pode fazer perguntas.');
+      showNativeToast('Chaves salvas');
+    }
+  }, []);
 
   return (
     <div className="aura-root">
@@ -184,12 +254,13 @@ const MainPanel = () => {
         <div className="aura-brand">
           <div className="aura-dot" />
           <h1>AURA</h1>
-          <span className="aura-badge">{activeProviderName.split(' ').pop()}</span>
+          <span className="aura-badge">
+            <ProviderIcon provider={provider} size={16} />
+            {providerShort(provider)}
+          </span>
         </div>
         <div className="aura-header-right">
-          <AuraButton className="pill" onClick={() => setShowConfig(true)}>
-            Chaves / IAs
-          </AuraButton>
+          <AuraButton className="pill" onClick={() => setShowConfig(true)}>Chaves / IAs</AuraButton>
           <div className="aura-clock">{clock}</div>
         </div>
       </header>
@@ -207,7 +278,7 @@ const MainPanel = () => {
 
         {/* Barra de pergunta */}
         <div className="aura-searchbox">
-          <AuraButton className="pill" onClick={handleMic}>
+          <AuraButton className="pill" onClick={toggleVoice}>
             {orbState === 'listening' ? '● Gravando' : 'Falar'}
           </AuraButton>
           <input
@@ -217,31 +288,23 @@ const MainPanel = () => {
             value={query}
             autoComplete="off"
             onChange={(ev) => setQuery(ev.target.value)}
-            onKeyDown={(ev) => { if (ev.key === 'Enter') handleSend(query); }}
+            onKeyDown={(ev) => { if (ev.key === 'Enter') ask(); }}
           />
-          <AuraButton variant="primary" onClick={() => handleSend(query)}>
-            Perguntar
-          </AuraButton>
+          <AuraButton variant="primary" onClick={ask}>Perguntar</AuraButton>
         </div>
 
         {/* Atalhos rápidos */}
         <div className="aura-shortcuts">
           {SHORTCUTS.map(([label, prompt]) => (
-            <AuraButton key={label} onClick={() => handleSend(prompt)}>
-              {label}
-            </AuraButton>
+            <AuraButton key={label} onClick={() => handleSend(prompt)}>{label}</AuraButton>
           ))}
         </div>
 
         {/* Troca de provedor */}
         <div className="aura-row">
           {PROVIDERS.map(([id, name]) => (
-            <AuraButton
-              key={id}
-              className="pill"
-              active={provider === id}
-              onClick={() => changeProvider(id)}
-            >
+            <AuraButton key={id} className="pill" active={provider === id} onClick={() => setProvider(id)}>
+              <ProviderIcon provider={id} size={18} />
               {name}
             </AuraButton>
           ))}
@@ -249,19 +312,30 @@ const MainPanel = () => {
 
         {/* Resposta */}
         {response && (
-          <div className="aura-response">
+          <div className="aura-response" ref={responseRef}>
             <div className="aura-response-head">
-              <span className="aura-response-title">{response.providerName}</span>
-              <AuraButton className="pill" onClick={handleStopSpeech}>Parar Voz</AuraButton>
+              <span className="aura-response-title">
+                <ProviderIcon provider={provider} size={18} /> Resposta do Aura IA ({response.providerName})
+              </span>
+              <div className="aura-response-actions">
+                <AuraButton className="pill" onClick={replaySpeech}>Ouvir Novamente</AuraButton>
+                <AuraButton className="pill" onClick={handleStopSpeech}>Parar Voz</AuraButton>
+              </div>
             </div>
-            <div className="aura-response-body">{response.text}</div>
+            <Scroller className="aura-response-scroller" direction="vertical">
+              <div
+                className="aura-response-body"
+                // eslint-disable-next-line react/no-danger
+                dangerouslySetInnerHTML={{ __html: formatMarkdown(response.text) }}
+              />
+            </Scroller>
           </div>
         )}
       </main>
 
       {/* ---------- Footer ---------- */}
       <footer className="aura-footer">
-        <span>🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Provedores</span>
+        <span>🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Chaves</span>
         {isWebOS() && device && (
           <span className="aura-footer-dev">
             {device.modelName || 'LG'} · webOS {device.sdkVersion || '?'} · {device.screenWidth}×{device.screenHeight}
@@ -269,7 +343,7 @@ const MainPanel = () => {
         )}
       </footer>
 
-      {showConfig && <ConfigModal onClose={closeConfig} />}
+      {showConfig && <ConfigModal provider={provider} onProviderChange={setProvider} onClose={closeConfig} />}
     </div>
   );
 };

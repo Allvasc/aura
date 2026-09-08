@@ -3,34 +3,41 @@ import SpotlightContainerDecorator from '@enact/spotlight/SpotlightContainerDeco
 import Spotlight from '@enact/spotlight';
 
 import AuraButton from './AuraButton';
+import ProviderIcon from './ProviderIcon';
 
 const Container = SpotlightContainerDecorator(
 	{ enterTo: 'last-focused', preserveId: true, spotlightRestrict: 'self-only' },
 	'div'
 );
 
+const PROVIDERS = [
+	['gemini', 'Google Gemini'],
+	['chatgpt', 'OpenAI ChatGPT'],
+	['claude', 'Anthropic Claude']
+];
+
 const FIELDS = [
-	['key_gemini', 'Chave Google Gemini', 'AIzaSy...'],
-	['key_chatgpt', 'Chave OpenAI ChatGPT', 'sk-proj-...'],
-	['key_claude', 'Chave Anthropic Claude', 'sk-ant-...']
+	['key_gemini', 'gemini', 'Chave Google Gemini', 'AIzaSy...'],
+	['key_chatgpt', 'chatgpt', 'Chave OpenAI ChatGPT', 'sk-proj-...'],
+	['key_claude', 'claude', 'Chave Anthropic Claude', 'sk-ant-...']
 ];
 
 const read = (k) => {
 	try { return window.localStorage.getItem(k) || ''; } catch { return ''; }
 };
 
-const ConfigModal = ({ onClose }) => {
+const ConfigModal = ({ provider, onProviderChange, onClose }) => {
 	const [values, setValues] = useState(() => ({
 		key_gemini: read('key_gemini'),
 		key_chatgpt: read('key_chatgpt'),
 		key_claude: read('key_claude')
 	}));
-	const firstInput = useRef(null);
+	const firstFocus = useRef(null);
 
 	useEffect(() => {
 		const prev = Spotlight.getCurrent();
 		const t = setTimeout(() => {
-			if (firstInput.current) firstInput.current.focus();
+			if (firstFocus.current && firstFocus.current.focus) firstFocus.current.focus();
 			else Spotlight.focus('aura-config');
 		}, 60);
 		return () => {
@@ -55,16 +62,29 @@ const ConfigModal = ({ onClose }) => {
 	return (
 		<div className="aura-modal">
 			<Container spotlightId="aura-config" className="aura-modal-card">
-				<h2 className="aura-modal-title">Configurar Chaves de IA</h2>
-				<p className="aura-modal-sub">
-					Cole a chave da API de cada serviço. Ela fica salva só nesta TV.
-				</p>
+				<h2 className="aura-modal-title">Configurações de Inteligência Artificial</h2>
 
-				{FIELDS.map(([k, label, ph], i) => (
+				<p className="aura-modal-sub">🤖 Escolha qual IA vai responder:</p>
+				<div className="aura-provider-choice">
+					{PROVIDERS.map(([id, name], i) => (
+						<AuraButton
+							key={id}
+							ref={i === 0 ? firstFocus : null}
+							className="pill"
+							active={provider === id}
+							onClick={() => onProviderChange(id)}
+						>
+							<ProviderIcon provider={id} size={18} />
+							{name}
+						</AuraButton>
+					))}
+				</div>
+
+				<p className="aura-modal-sub">🔑 Cole a chave da API de cada serviço (fica salva só nesta TV):</p>
+				{FIELDS.map(([k, pid, label, ph]) => (
 					<label key={k} className="aura-field">
-						<span>{label}</span>
+						<span><ProviderIcon provider={pid} size={16} /> {label}</span>
 						<input
-							ref={i === 0 ? firstInput : null}
 							type="text"
 							className="spottable aura-input aura-field-input"
 							placeholder={ph}
@@ -77,7 +97,7 @@ const ConfigModal = ({ onClose }) => {
 				))}
 
 				<div className="aura-modal-actions">
-					<AuraButton variant="primary" onClick={handleSave}>Salvar</AuraButton>
+					<AuraButton variant="primary" onClick={handleSave}>Salvar Alterações</AuraButton>
 					<AuraButton className="pill" onClick={() => onClose(false)}>Fechar</AuraButton>
 				</div>
 			</Container>

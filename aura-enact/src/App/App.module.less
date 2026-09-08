@@ -85,6 +85,8 @@
 	}
 
 	.aura-badge {
+		display: inline-flex;
+		align-items: center;
 		font-size: 17px;
 		background: linear-gradient(135deg, @accent-cyan, @accent-purple);
 		color: #001018;
@@ -93,7 +95,18 @@
 		font-weight: 700;
 		white-space: nowrap;
 		box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+
+		> .llm-icon { margin-right: 8px; }
 	}
+
+	.llm-icon {
+		display: inline-block;
+		vertical-align: middle;
+		flex-shrink: 0;
+	}
+	.aura-btn > .llm-icon { margin-right: 10px; }
+	.chatgpt-icon { color: #10a37f; }
+	.claude-icon { color: #d97757; }
 
 	.aura-header-right {
 		display: flex;
@@ -248,6 +261,9 @@
 
 	// ---- botoes (Spottable) -------------------------------------
 	.aura-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		border: 1px solid @glass-border;
 		background: @glass-bg;
 		color: #fff;
@@ -318,23 +334,80 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		flex-wrap: wrap;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 		padding-bottom: 14px;
 		margin-bottom: 16px;
 	}
 
 	.aura-response-title {
+		display: inline-flex;
+		align-items: center;
 		font-size: 24px;
 		font-weight: 700;
 		color: @accent-cyan;
+
+		> .llm-icon { margin-right: 10px; }
+	}
+
+	.aura-response-actions {
+		display: flex;
+
+		> * + * { margin-left: 14px; }
+	}
+
+	.aura-response-scroller {
+		height: 300px;
+		width: 100%;
 	}
 
 	.aura-response-body {
-		font-size: 24px;
+		font-size: 23px;
 		line-height: 1.7;
 		color: #e2e8f0;
 		font-weight: 300;
-		white-space: pre-wrap;
+		padding-right: 12px;
+
+		strong { color: @accent-cyan; font-weight: 700; }
+		em { color: #a7f3d0; font-style: italic; }
+		code {
+			font-family: monospace;
+			background: rgba(0, 242, 254, 0.12);
+			border-radius: 6px;
+			padding: 2px 8px;
+		}
+
+		.aura-p { margin: 0 0 14px; }
+		.aura-p:last-child { margin-bottom: 0; }
+
+		.aura-li {
+			display: flex;
+			align-items: flex-start;
+			margin: 10px 0;
+
+			> span:first-child { margin-right: 14px; }
+		}
+		.aura-li-num {
+			flex-shrink: 0;
+			width: 30px;
+			height: 30px;
+			border-radius: 50%;
+			background: rgba(0, 242, 254, 0.18);
+			border: 1px solid @accent-cyan;
+			color: @accent-cyan;
+			font-size: 17px;
+			font-weight: 700;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.aura-li-dot {
+			flex-shrink: 0;
+			color: @accent-cyan;
+			font-size: 26px;
+			font-weight: 700;
+			line-height: 1.1;
+		}
 	}
 
 	// ---- modal de configuracao --------------------------------
@@ -373,10 +446,19 @@
 	}
 
 	.aura-modal-sub {
-		margin: 0 0 24px;
+		margin: 20px 0 12px;
 		font-size: 18px;
-		color: @text-muted;
-		font-weight: 300;
+		color: @accent-cyan;
+		font-weight: 600;
+	}
+	.aura-modal-sub:first-of-type { margin-top: 4px; }
+
+	.aura-provider-choice {
+		display: flex;
+		flex-wrap: wrap;
+		margin-bottom: 8px;
+
+		> * { margin: 6px 12px 6px 0; }
 	}
 
 	.aura-field {
