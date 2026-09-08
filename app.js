@@ -307,8 +307,25 @@ function setupEventListeners() {
   });
 }
 
-// Voice Recognition (Web Speech Recognition API)
+// Voice Recognition (Web Speech Recognition API + Watchdog Safety)
 let activeRecognition = null;
+let voiceWatchdogTimer = null;
+
+function stopVoiceRecognition() {
+  if (voiceWatchdogTimer) {
+    clearTimeout(voiceWatchdogTimer);
+    voiceWatchdogTimer = null;
+  }
+  if (activeRecognition) {
+    try {
+      activeRecognition.abort();
+    } catch (e) {}
+    activeRecognition = null;
+  }
+  isListening = false;
+  updateMicButtonState(false);
+  if (!isSpeaking) setOrbState('idle');
+}
 
 function toggleVoiceRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -318,16 +335,13 @@ function toggleVoiceRecognition() {
     return;
   }
 
-  if (isListening && activeRecognition) {
-    try {
-      activeRecognition.stop();
-    } catch (e) {}
-    isListening = false;
-    setOrbState('idle');
-    updateMicButtonState(false);
+  if (isListening) {
+    stopVoiceRecognition();
     updateStatus('Ditado interrompido. Faça uma pergunta ou escolha um atalho.');
     return;
   }
+
+  stopVoiceRecognition();
 
   try {
     activeRecognition = new SpeechRecognition();
@@ -340,38 +354,48 @@ function toggleVoiceRecognition() {
       updateMicButtonState(true);
       setOrbState('listening');
       updateStatus('Ouvindo você... Fale agora!');
+
+      voiceWatchdogTimer = setTimeout(() => {
+        console.warn('⏱️ Voice Watchdog: Tempo limite atingido sem captura.');
+        stopVoiceRecognition();
+        updateStatus('Nenhum áudio detectado. Tente falar novamente ou use a busca por texto.');
+      }, 10000);
     };
 
     activeRecognition.onresult = (event) => {
+      if (voiceWatchdogTimer) clearTimeout(voiceWatchdogTimer);
       isListening = false;
       updateMicButtonState(false);
-      const transcript = event.results[0][0].transcript;
-      queryInput.value = transcript;
-      updateStatus(`Você disse: "${transcript}"`);
-      handleQuery(transcript);
+      
+      if (event.results && event.results[0] && event.results[0][0]) {
+        const transcript = event.results[0][0].transcript;
+        queryInput.value = transcript;
+        updateStatus(`Você disse: "${transcript}"`);
+        handleQuery(transcript);
+      } else {
+        stopVoiceRecognition();
+      }
     };
 
     activeRecognition.onerror = (err) => {
       console.log('Voice error:', err);
-      isListening = false;
-      updateMicButtonState(false);
-      setOrbState('idle');
-      updateStatus('Não foi possível ouvir. Tente novamente ou use os atalhos!');
+      if (voiceWatchdogTimer) clearTimeout(voiceWatchdogTimer);
+      stopVoiceRecognition();
+      updateStatus('Não foi possível capturar o áudio. Tente novamente ou use a digitação.');
     };
 
     activeRecognition.onend = () => {
-      isListening = false;
-      updateMicButtonState(false);
-      if (!isSpeaking) setOrbState('idle');
+      if (voiceWatchdogTimer) clearTimeout(voiceWatchdogTimer);
+      if (isListening) {
+        stopVoiceRecognition();
+      }
     };
 
     activeRecognition.start();
   } catch (err) {
     console.error('Speech recognition exception:', err);
-    isListening = false;
-    updateMicButtonState(false);
-    setOrbState('idle');
-    updateStatus('Erro ao ativar microfone.');
+    stopVoiceRecognition();
+    updateStatus('Erro ao ativar microfone. Tente novamente.');
   }
 }
 
