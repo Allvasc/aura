@@ -15,5 +15,12 @@
   "iconColor": "#00f2fe",
   "transparent": false,
   "deletable": true,
-  "supportGip": true
+  "supportGip": true,
+  "requiredPermissions": [
+    "tts",
+    "audio",
+    "media.controls",
+    "media.service",
+    "system.notifications"
+  ]
 }

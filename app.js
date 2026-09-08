@@ -454,59 +454,231 @@ function formatMarkdownText(text) {
   return paragraphs.map(p => `<p class="response-paragraph">${p.replace(/\n/g, '<br>')}</p>`).join('');
 }
 
-// Text-to-Speech (Voz da TV)
+// Text-to-Speech (Voz Nativa da TV LG webOS & Fallback Multiescala)
+let currentAudioElement = null;
+let audioQueue = [];
+let audioUnlocked = false;
+
+function unlockAudioContext() {
+  if (audioUnlocked) return;
+  try {
+    const silent = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+    silent.play().then(() => { audioUnlocked = true; }).catch(() => {});
+  } catch (e) {}
+}
+document.addEventListener('keydown', unlockAudioContext, { once: true });
+document.addEventListener('click', unlockAudioContext, { once: true });
+
 function speakText(text) {
+  if (!text) return;
   stopSpeech();
+
+  const cleanText = text.replace(/[*_#`~]/g, '').replace(/\s+/g, ' ').trim();
+  if (!cleanText) return;
+
   setOrbState('speaking');
   isSpeaking = true;
 
-  if ('speechSynthesis' in window) {
-    currentUtterance = new SpeechSynthesisUtterance(text);
-    currentUtterance.lang = 'pt-BR';
-    currentUtterance.rate = 1.0;
-    currentUtterance.pitch = 1.0;
+  // 1. Tentar Voz Nativa C++ da Smart TV LG (Luna TTS via PalmServiceBridge)
+  speakLunaNative(cleanText, function(success) {
+    if (success) {
+      console.log('✅ Voz nativa da TV LG iniciada com sucesso!');
+      return;
+    }
+    
+    // 2. Tentar Web Speech Synthesis se disponível com vozes instaladas
+    if ('speechSynthesis' in window && window.speechSynthesis.getVoices) {
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          console.log('📢 Activando Web Speech Synthesis com voz local...');
+          currentUtterance = new SpeechSynthesisUtterance(cleanText);
+          currentUtterance.lang = 'pt-BR';
+          currentUtterance.rate = 1.0;
+          currentUtterance.onend = () => { isSpeaking = false; setOrbState('idle'); };
+          currentUtterance.onerror = () => { speakAudioFallback(cleanText); };
+          window.speechSynthesis.speak(currentUtterance);
+          return;
+        }
+      } catch (e) {}
+    }
 
-    currentUtterance.onstart = () => {
-      isSpeaking = true;
-      setOrbState('speaking');
-    };
+    // 3. Fallback de Áudio TTS em Alta Definição Dividido por Frases (Sem cortar texto!)
+    console.log('📢 Iniciando fallback de áudio streaming por frases...');
+    speakAudioFallback(cleanText);
+  });
+}
 
-    currentUtterance.onend = () => {
-      isSpeaking = false;
-      setOrbState('idle');
-    };
+function speakLunaNative(cleanText, callback) {
+  let responded = false;
 
-    currentUtterance.onerror = () => {
-      isSpeaking = false;
-      setOrbState('idle');
-    };
-
-    window.speechSynthesis.speak(currentUtterance);
+  function finish(success) {
+    if (!responded) {
+      responded = true;
+      callback(success);
+    }
   }
 
+  // Tenta via PalmServiceBridge (WebOS Native Bridge)
+  if (window.PalmServiceBridge) {
+    try {
+      console.log('📢 Solicitando voz nativa webOS via PalmServiceBridge...');
+      const bridge = new PalmServiceBridge();
+      bridge.onservicecallback = function(res) {
+        console.log('Luna TTS response:', res);
+        try {
+          const parsed = JSON.parse(res);
+          if (parsed.returnValue !== false) {
+            finish(true);
+          } else {
+            finish(false);
+          }
+        } catch (e) {
+          finish(false);
+        }
+      };
+
+      const params = JSON.stringify({
+        text: cleanText,
+        language: "pt-BR",
+        clear: true
+      });
+      bridge.call("luna://com.webos.service.tts/speak", params);
+
+      // Timeout de segurança se o serviço nativo não der callback rápido
+      setTimeout(() => finish(true), 800);
+      return;
+    } catch (e) {
+      console.warn('Erro ao chamar PalmServiceBridge:', e);
+    }
+  }
+
+  // Tenta via webOS.service.request se o bridge falhou
   if (window.webOS && window.webOS.service) {
     try {
       window.webOS.service.request("luna://com.webos.service.tts", {
         method: "speak",
-        parameters: { text: text, language: "pt-BR" },
-        onSuccess: function() {
-          isSpeaking = false;
-          setOrbState('idle');
-        },
-        onFailure: function() {
-          isSpeaking = false;
-          setOrbState('idle');
-        }
+        parameters: { text: cleanText, language: "pt-BR", clear: true },
+        onSuccess: () => finish(true),
+        onFailure: () => finish(false)
       });
+      setTimeout(() => finish(true), 800);
+      return;
     } catch (e) {
-      console.log('Luna Service TTS fallback:', e);
+      console.warn('Erro ao chamar webOS.service:', e);
     }
   }
+
+  finish(false);
+}
+
+function speakAudioFallback(text) {
+  // Divide o texto em blocos de até 170 caracteres para leitura contínua e sem estouro
+  const chunks = splitTextIntoChunks(text, 170);
+  if (!chunks || chunks.length === 0) {
+    isSpeaking = false;
+    setOrbState('idle');
+    return;
+  }
+
+  audioQueue = chunks;
+  playNextAudioChunk();
+}
+
+function splitTextIntoChunks(text, maxLength) {
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  const chunks = [];
+  let currentChunk = '';
+
+  sentences.forEach(sentence => {
+    if ((currentChunk + sentence).length <= maxLength) {
+      currentChunk += ' ' + sentence;
+    } else {
+      if (currentChunk.trim()) chunks.push(currentChunk.trim());
+      if (sentence.length > maxLength) {
+        const parts = sentence.split(/[,;\s]+/);
+        let subChunk = '';
+        parts.forEach(part => {
+          if ((subChunk + ' ' + part).length <= maxLength) {
+            subChunk += ' ' + part;
+          } else {
+            if (subChunk.trim()) chunks.push(subChunk.trim());
+            subChunk = part;
+          }
+        });
+        if (subChunk.trim()) chunks.push(subChunk.trim());
+        currentChunk = '';
+      } else {
+        currentChunk = sentence;
+      }
+    }
+  });
+
+  if (currentChunk.trim()) chunks.push(currentChunk.trim());
+  return chunks;
+}
+
+function playNextAudioChunk() {
+  if (audioQueue.length === 0) {
+    isSpeaking = false;
+    setOrbState('idle');
+    return;
+  }
+
+  const chunk = audioQueue.shift();
+  const encodedText = encodeURIComponent(chunk);
+  const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=gtx&q=${encodedText}`;
+
+  if (currentAudioElement) {
+    try { currentAudioElement.pause(); } catch(e) {}
+  }
+
+  currentAudioElement = new Audio(audioUrl);
+  
+  currentAudioElement.play().then(() => {
+    isSpeaking = true;
+    setOrbState('speaking');
+  }).catch(e => {
+    console.log('Chunk playback failed:', e);
+    playNextAudioChunk();
+  });
+
+  currentAudioElement.onended = () => {
+    playNextAudioChunk();
+  };
+
+  currentAudioElement.onerror = () => {
+    playNextAudioChunk();
+  };
 }
 
 function stopSpeech() {
+  audioQueue = [];
+  
+  // Parar Luna TTS nativo via PalmServiceBridge
+  if (window.PalmServiceBridge) {
+    try {
+      const bridge = new PalmServiceBridge();
+      bridge.call("luna://com.webos.service.tts/stop", JSON.stringify({}));
+    } catch (e) {}
+  }
+  if (window.webOS && window.webOS.service) {
+    try {
+      window.webOS.service.request("luna://com.webos.service.tts", {
+        method: "stop",
+        parameters: {}
+      });
+    } catch (e) {}
+  }
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (currentAudioElement) {
+    try {
+      currentAudioElement.pause();
+      currentAudioElement.currentTime = 0;
+    } catch (e) {}
+    currentAudioElement = null;
   }
   isSpeaking = false;
   setOrbState('idle');
