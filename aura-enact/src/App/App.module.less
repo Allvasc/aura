@@ -421,6 +421,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		padding: 3vh 0;
+		box-sizing: border-box;
+		overflow-y: auto;
 		z-index: 1000;
 		animation: aura-slide-up 0.25s ease-out;
 	}
@@ -429,12 +432,12 @@
 		box-sizing: border-box;
 		width: 900px;
 		max-width: 92vw;
-		max-height: 90vh;
+		max-height: 92vh;
 		overflow-y: auto;
 		background: rgba(12, 19, 34, 0.98);
 		border: 1px solid @accent-cyan;
 		border-radius: 24px;
-		padding: 40px 44px;
+		padding: 32px 40px;
 		box-shadow: 0 20px 60px rgba(0, 242, 254, 0.2);
 	}
 
@@ -489,6 +492,61 @@
 		margin-top: 28px;
 
 		> * + * { margin-left: 16px; }
+	}
+
+	// QR / código de pareamento
+	.aura-qr {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		margin: 16px 0;
+
+		img {
+			width: 220px;
+			height: 220px;
+			border-radius: 16px;
+			box-shadow: 0 10px 30px rgba(0, 242, 254, 0.28);
+		}
+	}
+	.aura-qr-empty {
+		width: 220px;
+		height: 220px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px dashed @glass-border;
+		border-radius: 16px;
+		color: @text-muted;
+	}
+
+	.aura-modal-line {
+		margin: 8px 0;
+		font-size: 19px;
+		color: #e2e8f0;
+
+		strong { color: @accent-cyan; }
+	}
+	.aura-modal-hint {
+		margin: 14px 0 0;
+		font-size: 16px;
+		color: @text-muted;
+	}
+
+	.aura-pair-code {
+		font-family: monospace;
+		letter-spacing: 4px;
+		color: @accent-cyan;
+		text-shadow: 0 0 12px rgba(0, 242, 254, 0.5);
+	}
+	.aura-pair-code-big {
+		display: inline-block;
+		font-size: 56px;
+		font-weight: 700;
+		letter-spacing: 12px;
+		padding: 16px 36px;
+		border: 2px dashed @accent-cyan;
+		border-radius: 18px;
+		background: rgba(0, 242, 254, 0.1);
 	}
 
 	// ---- footer ------------------------------------------------

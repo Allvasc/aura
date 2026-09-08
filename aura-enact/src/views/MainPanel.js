@@ -10,8 +10,11 @@ import {
 import { fetchAIResponse } from '../services/aiService';
 import { formatMarkdown } from '../services/format';
 import { speak, stopSpeech, unlockAudio } from '../services/speech';
+import { connectSync, getDeviceCode } from '../services/sync';
 import AuraButton from '../components/AuraButton';
 import ConfigModal from '../components/ConfigModal';
+import MobileModal from '../components/MobileModal';
+import AccountModal from '../components/AccountModal';
 import ProviderIcon from '../components/ProviderIcon';
 
 const readLS = (k, fallback = '') => {
@@ -51,17 +54,26 @@ const MainPanel = () => {
   const [response, setResponse] = useState(null);
   const [clock, setClock] = useState(fmtClock());
   const [showConfig, setShowConfig] = useState(false);
+  const [showMobile, setShowMobile] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const [device, setDevice] = useState(null);
+  const [syncStatus, setSyncStatus] = useState('offline');
 
   const recognitionRef = useRef(null);
   const watchdogRef = useRef(null);
   const responseRef = useRef(null);
   const providerRef = useRef(provider);
-  const showConfigRef = useRef(showConfig);
+  const anyModalRef = useRef(false);
   // refs de handlers usados no listener global de teclas (registrado 1x)
   const keyActions = useRef({});
   providerRef.current = provider;
-  showConfigRef.current = showConfig;
+  anyModalRef.current = showConfig || showMobile || showAccount;
+
+  const closeAllModals = useCallback(() => {
+    setShowConfig(false);
+    setShowMobile(false);
+    setShowAccount(false);
+  }, []);
 
   const hasKey = (p) => !!readLS(`key_${p}`);
 
@@ -219,24 +231,44 @@ const MainPanel = () => {
       if (k === 'MediaPause' || k === 'MediaStop' || c === 413 || c === 19) { a.stop(); return; }
       // Voltar
       if (k === 'GoBack' || k === 'Escape' || c === 461) {
-        if (showConfigRef.current) { ev.preventDefault(); ev.stopPropagation(); setShowConfig(false); }
+        if (anyModalRef.current) { ev.preventDefault(); ev.stopPropagation(); a.closeModals(); }
         else { a.stop(); }
       }
     };
     window.addEventListener('keydown', onKey, true);
+
+    // Sincronia com o celular (Socket.IO)
+    const disconnect = connectSync({
+      deviceCode: getDeviceCode(),
+      onStatus: setSyncStatus,
+      onKeys: () => {
+        setProviderState(readLS('aura_active_provider', 'gemini'));
+        setStatus('✨ Chaves sincronizadas pelo seu celular!');
+        showNativeToast('Chaves recebidas do celular');
+      },
+      onPrompt: (prompt, prov) => {
+        if (prov) { setProviderState(prov); writeLS('aura_active_provider', prov); }
+        setQuery(prompt);
+        keyActions.current.send(prompt);
+      }
+    });
+
     return () => {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keydown', unlockOnce);
       window.removeEventListener('click', unlockOnce);
+      disconnect();
     };
   }, []);
 
-  // mantem os handlers atuais acessiveis ao listener global
+  // mantem os handlers atuais acessiveis ao listener global e ao socket
   keyActions.current = {
     clear: clearAll,
     voice: toggleVoice,
     replay: replaySpeech,
-    stop: handleStopSpeech
+    stop: handleStopSpeech,
+    send: handleSend,
+    closeModals: closeAllModals
   };
 
   const closeConfig = useCallback((saved) => {
@@ -260,6 +292,10 @@ const MainPanel = () => {
           </span>
         </div>
         <div className="aura-header-right">
+          <AuraButton className="pill" onClick={() => setShowMobile(true)}>
+            Celular {syncStatus === 'online' ? '🟢' : ''}
+          </AuraButton>
+          <AuraButton className="pill" onClick={() => setShowAccount(true)}>Conta</AuraButton>
           <AuraButton className="pill" onClick={() => setShowConfig(true)}>Chaves / IAs</AuraButton>
           <div className="aura-clock">{clock}</div>
         </div>
@@ -344,6 +380,8 @@ const MainPanel = () => {
       </footer>
 
       {showConfig && <ConfigModal provider={provider} onProviderChange={setProvider} onClose={closeConfig} />}
+      {showMobile && <MobileModal syncStatus={syncStatus} onClose={() => setShowMobile(false)} />}
+      {showAccount && <AccountModal onClose={() => setShowAccount(false)} />}
     </div>
   );
 };
