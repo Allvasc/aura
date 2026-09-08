@@ -1,39 +1,42 @@
 import { getInstalledAppsSummary, adjustTVVolume, toggleTVMute, launchAppOnTV } from './webosService';
 
+// Os comandos de hardware rodam em background (Luna); ignora falha silenciosamente.
+const fire = (p) => { if (p && p.catch) p.catch(() => {}); };
+
 export function parseAndExecuteIntents(query) {
   if (!query) return null;
   const q = query.toLowerCase().trim();
 
   if (q.includes('aumenta o volume') || q.includes('aumentar volume') || q.includes('subir volume') || q.includes('mais alto')) {
-    adjustTVVolume('up');
+    fire(adjustTVVolume('up'));
     return 'Aumentei o volume da sua Smart TV LG!';
   }
   if (q.includes('diminui o volume') || q.includes('diminuir volume') || q.includes('baixar volume') || q.includes('mais baixo')) {
-    adjustTVVolume('down');
+    fire(adjustTVVolume('down'));
     return 'Diminuí o volume da sua Smart TV LG!';
   }
   if (q.includes('mudo') || q.includes('mutar tv') || q.includes('silenciar')) {
-    toggleTVMute();
+    fire(toggleTVMute());
     return 'Alterei a função Mudo na sua Smart TV LG!';
   }
   if (q.includes('youtube')) {
-    launchAppOnTV('youtube.leanback.v4');
+    fire(launchAppOnTV('youtube.leanback.v4'));
     return 'Abrindo o aplicativo do YouTube na sua Smart TV LG...';
   }
   if (q.includes('netflix')) {
-    launchAppOnTV('netflix');
+    fire(launchAppOnTV('netflix'));
     return 'Abrindo o aplicativo da Netflix na sua Smart TV LG...';
   }
   if (q.includes('spotify')) {
-    launchAppOnTV('spotify-tv');
+    fire(launchAppOnTV('spotify-tv'));
     return 'Abrindo o aplicativo do Spotify na sua Smart TV LG...';
   }
   if (q.includes('prime video') || q.includes('amazon prime')) {
-    launchAppOnTV('amazon');
+    fire(launchAppOnTV('amazon'));
     return 'Abrindo o Amazon Prime Video na sua Smart TV LG...';
   }
   if (q.includes('globoplay')) {
-    launchAppOnTV('globoplay');
+    fire(launchAppOnTV('globoplay'));
     return 'Abrindo o Globoplay na sua Smart TV LG...';
   }
 

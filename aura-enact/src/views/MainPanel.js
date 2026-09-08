@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchInstalledTVApps, speakLunaNative, stopLunaNativeTTS } from '../services/webosService';
+import {
+  fetchInstalledTVApps,
+  getDeviceInfo,
+  isWebOS,
+  speakLunaNative,
+  stopLunaNativeTTS
+} from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
 import AuraButton from '../components/AuraButton';
 import ConfigModal from '../components/ConfigModal';
@@ -39,8 +45,11 @@ const MainPanel = () => {
   const [response, setResponse] = useState(null);
   const [clock, setClock] = useState(fmtClock());
   const [showConfig, setShowConfig] = useState(false);
+  const [device, setDevice] = useState(null);
 
   const recognitionRef = useRef(null);
+  const showConfigRef = useRef(showConfig);
+  showConfigRef.current = showConfig;
 
   const hasKey = (p) => !!readLS(`key_${p}`);
 
@@ -59,10 +68,29 @@ const MainPanel = () => {
     return () => clearInterval(t);
   }, []);
 
+  // webOS: info do dispositivo, apps instalados e tecla BACK do controle
   useEffect(() => {
-    fetchInstalledTVApps((apps, summary) => {
-      console.log('Enact webOS Apps carregados:', summary);
+    getDeviceInfo((info) => {
+      setDevice(info);
+      console.log('webOS device:', info);
     });
+
+    fetchInstalledTVApps((apps, summary) => {
+      console.log(`webOS: ${apps.length} apps na TV`, summary);
+    });
+
+    // BACK (461 no controle LG) / Esc: fecha o modal; senao deixa o SO sair do app
+    const onKey = (ev) => {
+      if (ev.keyCode === 461 || ev.key === 'Escape' || ev.key === 'GoBack') {
+        if (showConfigRef.current) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          setShowConfig(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   const activeProviderName = PROVIDERS.find((p) => p[0] === provider)[1];
@@ -233,7 +261,12 @@ const MainPanel = () => {
 
       {/* ---------- Footer ---------- */}
       <footer className="aura-footer">
-        🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Provedores
+        <span>🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Provedores</span>
+        {isWebOS() && device && (
+          <span className="aura-footer-dev">
+            {device.modelName || 'LG'} · webOS {device.sdkVersion || '?'} · {device.screenWidth}×{device.screenHeight}
+          </span>
+        )}
       </footer>
 
       {showConfig && <ConfigModal onClose={closeConfig} />}
