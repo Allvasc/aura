@@ -25,21 +25,46 @@ causava a tela preta no boot.
 `webos-meta/appinfo.json` (+ icones) e copiado para `dist/` no build. E o que
 faz o `enact pack` compilar em modo webOS.
 
-## Gerar o pacote .ipk
+## Rodar / empacotar (script `scripts/webos.mjs`)
+
+Requer o `ares` CLI (`npm i -g @webos-tools/cli`). No VS Code, os mesmos
+passos estao em **Terminal > Run Task > webOS: ...** (`.vscode/tasks.json`).
 
 ```sh
 npm install
-npm run pack-webos      # enact pack -p  +  ares-package ./dist -o ./bin
+
+npm run pack-webos          # build + gera bin/com.aura.ia.app_4.0.1_all.ipk
+npm run sim                 # build + abre no webOS TV Simulator (padrao 6.0)
+npm run sim -- 5.0          # ... versao especifica do Simulator
+npm run deploy -- emulator  # build + package + install + launch + inspect (VM)
+npm run deploy -- tv        # idem, numa TV real registrada como device "tv"
+npm run inspect -- tv       # abre so o Web Inspector (DevTools remoto)
+node scripts/webos.mjs devices
 ```
 
-Saida: `bin/com.aura.ia.app_4.0.1_all.ipk`
+### webOS TV Simulator
 
-Instalar na TV (com Developer Mode ativo e IP pareado no ares):
+Nao vem no `ares`. Instale por um destes caminhos:
+
+- VS Code: extensao **webOS Studio** > painel lateral > **Simulator Manager**
+  (login LG) > baixa o Simulator 6.0
+- ou manual: <https://webostv.developer.lge.com/develop/tools/simulator-installation>
+
+Se o `npm run sim` nao achar sozinho, aponte com
+`AURA_SIMULATOR_PATH=<pasta do simulator>` ou use o comando
+**webOS TV: Run on Simulator** da extensao.
+
+> O Simulator usa o Chromium do PC (moderno) — bom para **design e navegacao**,
+> nao para validar o Chrome 68. Para compat real: emulador ou TV.
+
+### TV real
+
+Ligue o **Modo Desenvolvedor** (app Developer Mode na TV, Key Server ON), depois:
 
 ```sh
-ares-install ./bin/com.aura.ia.app_4.0.1_all.ipk
-ares-launch com.aura.ia.app
-ares-inspect com.aura.ia.app --open   # abre o DevTools remoto para debugar
+npm run webos -- add-tv 192.168.0.42      # registra a TV (ip da sua rede)
+npx ares-novacom --device tv --getkey     # cola o passphrase mostrado na TV
+npm run deploy -- tv
 ```
 
 ---

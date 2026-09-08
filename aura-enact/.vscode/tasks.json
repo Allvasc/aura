@@ -1,0 +1,52 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "webOS: Build (enact pack -p)",
+			"type": "shell",
+			"command": "npm run pack-p",
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "webOS: Package .ipk",
+			"type": "shell",
+			"command": "npm run webos -- package",
+			"problemMatcher": []
+		},
+		{
+			"label": "webOS: Run on Simulator",
+			"type": "shell",
+			"command": "npm run sim",
+			"problemMatcher": [],
+			"detail": "Build + abre no webOS TV Simulator (padrao 6.0). Requer o Simulator instalado."
+		},
+		{
+			"label": "webOS: Deploy to Emulator",
+			"type": "shell",
+			"command": "npm run deploy -- emulator",
+			"problemMatcher": [],
+			"detail": "Build + package + install + launch + inspect no emulador (VirtualBox)."
+		},
+		{
+			"label": "webOS: Deploy to TV",
+			"type": "shell",
+			"command": "npm run deploy -- tv",
+			"problemMatcher": [],
+			"detail": "Idem, na TV real registrada como device 'tv' (npm run webos -- add-tv <ip>)."
+		},
+		{
+			"label": "webOS: Inspect (DevTools remoto)",
+			"type": "shell",
+			"command": "npm run inspect -- emulator",
+			"problemMatcher": []
+		},
+		{
+			"label": "webOS: Dev server (enact serve)",
+			"type": "shell",
+			"command": "npm run serve",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
