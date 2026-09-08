@@ -1,6 +1,6 @@
 {
   "id": "com.aura.ia.app",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "vendor": "DevIA",
   "type": "web",
   "main": "index.html",
@@ -9,7 +9,7 @@
   "largeIcon": "largeIcon.png",
   "bgImage": "bgImage.png",
   "splashBackground": "splash.png",
-  "description": "O Aura IA Multi-Engine permite escolher entre 3 das maiores Inteligências Artificiais do mundo: Google Gemini, OpenAI ChatGPT e Anthropic Claude na sua Smart TV LG.",
+  "description": "O Aura IA Onisciente & Onipotente permite controlar sua Smart TV LG por voz, abrir aplicativos, ajustar volume, alternar HDMI e consultar IAs (Gemini, ChatGPT, Claude).",
   "category": "Entertainment",
   "uiRevision": "2",
   "iconColor": "#00f2fe",
@@ -21,6 +21,9 @@
     "audio",
     "media.controls",
     "media.service",
-    "system.notifications"
+    "system.notifications",
+    "application.operation",
+    "tv.control",
+    "settings.read"
   ]
 }

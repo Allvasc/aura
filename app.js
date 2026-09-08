@@ -52,6 +52,91 @@ const RENDER_BACKEND_URL = window.location.hostname === 'localhost'
 
 let tvSocket = null;
 
+// Módulo WebOS TV Hardware & Omnipotência
+let installedTVApps = [];
+let installedTVAppsSummary = '';
+
+function initWebOSBridge() {
+  fetchInstalledAppsOnTV();
+}
+
+function fetchInstalledAppsOnTV() {
+  if (window.PalmServiceBridge) {
+    try {
+      console.log('🔍 Auditando aplicativos instalados na Smart TV LG...');
+      const bridge = new PalmServiceBridge();
+      bridge.onservicecallback = function(res) {
+        try {
+          const parsed = JSON.parse(res);
+          if (parsed.apps && Array.isArray(parsed.apps)) {
+            installedTVApps = parsed.apps;
+            const names = parsed.apps.map(a => a.title || a.id).slice(0, 30);
+            installedTVAppsSummary = names.join(', ');
+            console.log('📺 Auditados ' + parsed.apps.length + ' apps na TV LG:', installedTVAppsSummary);
+          }
+        } catch (e) {}
+      };
+      bridge.call("luna://com.webos.applicationManager/listApps", "{}");
+    } catch (e) {
+      console.warn('Erro ao listar apps webOS:', e);
+    }
+  }
+}
+
+function launchAppOnTV(appId) {
+  if (!appId) return false;
+  if (window.PalmServiceBridge) {
+    try {
+      console.log('🚀 Executando inicialização do app nativo:', appId);
+      const bridge = new PalmServiceBridge();
+      bridge.call("luna://com.webos.applicationManager/launch", JSON.stringify({ id: appId }));
+      showNativeToast('Abrindo aplicativo na TV...', appId);
+      return true;
+    } catch (e) {
+      console.warn('Erro ao abrir app:', e);
+    }
+  }
+  return false;
+}
+
+function adjustTVVolume(direction) {
+  if (window.PalmServiceBridge) {
+    try {
+      const bridge = new PalmServiceBridge();
+      const endpoint = direction === 'up' 
+        ? "luna://com.webos.service.audio/volumeUp" 
+        : "luna://com.webos.service.audio/volumeDown";
+      bridge.call(endpoint, "{}");
+      showNativeToast('Volume da TV alterado (' + (direction === 'up' ? '+' : '-') + ')');
+      return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+function toggleTVMute() {
+  if (window.PalmServiceBridge) {
+    try {
+      const bridge = new PalmServiceBridge();
+      bridge.call("luna://com.webos.service.audio/toggleMute", "{}");
+      showNativeToast('Mudo alterado na TV');
+      return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+function showNativeToast(message) {
+  if (window.PalmServiceBridge) {
+    try {
+      const bridge = new PalmServiceBridge();
+      bridge.call("luna://com.webos.notification/createToast", JSON.stringify({
+        message: "⚡ Aura IA: " + message
+      }));
+    } catch (e) {}
+  }
+}
+
 // Initial Setup
 document.addEventListener('DOMContentLoaded', () => {
   generatePairCode();
@@ -61,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   loadSavedApiKeys();
   initTvSocket();
+  initWebOSBridge();
 });
 
 // Clock & Date Updates
@@ -300,6 +386,56 @@ function updateMicButtonState(listening) {
   }
 }
 
+// Interceptador de Intenções de Voz e Hardware
+function parseAndExecuteIntents(query) {
+  if (!query) return false;
+  const q = query.toLowerCase().trim();
+
+  if (q.includes('aumenta o volume') || q.includes('aumentar volume') || q.includes('subir volume') || q.includes('mais alto')) {
+    adjustTVVolume('up');
+    return 'Aumentei o volume da sua Smart TV LG!';
+  }
+  if (q.includes('diminui o volume') || q.includes('diminuir volume') || q.includes('baixar volume') || q.includes('mais baixo')) {
+    adjustTVVolume('down');
+    return 'Diminuí o volume da sua Smart TV LG!';
+  }
+  if (q.includes('mudo') || q.includes('mutar tv') || q.includes('silenciar')) {
+    toggleTVMute();
+    return 'Alterei a função Mudo na sua Smart TV LG!';
+  }
+  if (q.includes('youtube')) {
+    launchAppOnTV('youtube.leanback.v4');
+    return 'Abrindo o aplicativo do YouTube na sua Smart TV LG...';
+  }
+  if (q.includes('netflix')) {
+    launchAppOnTV('netflix');
+    return 'Abrindo o aplicativo da Netflix na sua Smart TV LG...';
+  }
+  if (q.includes('spotify')) {
+    launchAppOnTV('spotify-tv');
+    return 'Abrindo o aplicativo do Spotify na sua Smart TV LG...';
+  }
+  if (q.includes('prime video') || q.includes('amazon prime')) {
+    launchAppOnTV('amazon');
+    return 'Abrindo o Amazon Prime Video na sua Smart TV LG...';
+  }
+  if (q.includes('globoplay')) {
+    launchAppOnTV('globoplay');
+    return 'Abrindo o Globoplay na sua Smart TV LG...';
+  }
+
+  return false;
+}
+
+function getSystemPromptContext(providerName) {
+  let context = `Você é o Aura IA (Provedor ${providerName}), o assistente virtual oficial, futurista, amigável, onisciente e potente para uma Smart TV LG 50 polegadas.`;
+  if (installedTVAppsSummary) {
+    context += ` Esta Smart TV LG possui os seguintes aplicativos instalados: [${installedTVAppsSummary}]. Sempre considere esses apps nas recomendações.`;
+  }
+  context += ` Responda de forma clara, direta e concisa em português do Brasil.`;
+  return context;
+}
+
 // Multi-AI Dispatcher (Gemini, ChatGPT, Claude)
 async function handleQuery(query) {
   if (!query || query.trim() === '') {
@@ -310,6 +446,13 @@ async function handleQuery(query) {
   stopSpeech();
   setOrbState('thinking');
   responseCard.classList.add('hidden');
+
+  // Verifica se é um comando direto de hardware/app
+  const directIntentResult = parseAndExecuteIntents(query);
+  if (directIntentResult) {
+    displayResponse(directIntentResult, 'Comando de Hardware TV');
+    return;
+  }
 
   let providerName = 'Google Gemini';
   if (currentProvider === 'chatgpt') providerName = 'OpenAI ChatGPT';
@@ -340,13 +483,15 @@ async function fetchGemini(query) {
     return "Para usar o Google Gemini, por favor insira sua chave da API do Gemini no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
+  const sysPrompt = getSystemPromptContext('Google Gemini');
+
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{
         parts: [{
-          text: `Você é o Aura IA (Provedor Google Gemini), um assistente virtual futurista e amigável para uma Smart TV LG. Responda de forma clara, direta e concisa em português do Brasil: ${query}`
+          text: `${sysPrompt}\n\nPergunta do usuário: ${query}`
         }]
       }]
     })
@@ -366,6 +511,8 @@ async function fetchChatGPT(query) {
     return "Para usar o OpenAI ChatGPT, por favor insira sua chave da API da OpenAI no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
+  const sysPrompt = getSystemPromptContext('OpenAI ChatGPT');
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -375,7 +522,7 @@ async function fetchChatGPT(query) {
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'Você é o Aura IA (Provedor OpenAI ChatGPT), um assistente virtual futurista para Smart TV LG. Responda de forma clara e concisa em português do Brasil.' },
+        { role: 'system', content: sysPrompt },
         { role: 'user', content: query }
       ]
     })
@@ -395,6 +542,8 @@ async function fetchClaude(query) {
     return "Para usar o Anthropic Claude, por favor insira sua chave da API da Anthropic no botão Keys / IAs no topo da tela ou pelo celular!";
   }
 
+  const sysPrompt = getSystemPromptContext('Anthropic Claude');
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -405,7 +554,7 @@ async function fetchClaude(query) {
     body: JSON.stringify({
       model: 'claude-3-haiku-20240307',
       max_tokens: 1024,
-      system: 'Você é o Aura IA (Provedor Anthropic Claude), um assistente virtual futurista para Smart TV LG. Responda de forma clara e concisa em português do Brasil.',
+      system: sysPrompt,
       messages: [{ role: 'user', content: query }]
     })
   });
