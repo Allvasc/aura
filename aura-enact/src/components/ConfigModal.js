@@ -61,7 +61,13 @@ const ConfigModal = ({ provider, onProviderChange, onClose }) => {
 
 	return (
 		<div className="aura-modal">
-			<Container spotlightId="aura-config" className="aura-modal-card">
+			<Container
+				spotlightId="aura-config"
+				className="aura-modal-card"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Configurações de Inteligência Artificial"
+			>
 				<h2 className="aura-modal-title">Configurações de Inteligência Artificial</h2>
 
 				<p className="aura-modal-sub">🤖 Escolha qual IA vai responder:</p>

@@ -16,5 +16,6 @@
 	"transparent": false,
 	"deletable": true,
 	"disableBackHistoryAPI": true,
+	"supportsAudioGuidance": true,
 	"description": "Aura IA Enact v4.0.1 - assistente para Smart TV LG (Gemini, ChatGPT, Claude) com navegacao Spotlight e voz."
 }

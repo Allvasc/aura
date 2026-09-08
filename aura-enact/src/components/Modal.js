@@ -24,7 +24,13 @@ const Modal = ({ title, spotlightId, children }) => {
 
 	return (
 		<div className="aura-modal">
-			<Container spotlightId={id} className="aura-modal-card">
+			<Container
+				spotlightId={id}
+				className="aura-modal-card"
+				role="dialog"
+				aria-modal="true"
+				aria-label={typeof title === 'string' ? title : 'Janela'}
+			>
 				{title && <h2 className="aura-modal-title">{title}</h2>}
 				{children}
 			</Container>

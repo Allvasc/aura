@@ -34,6 +34,37 @@ export function luna(service, method, parameters = {}, {subscribe = false} = {})
 	});
 }
 
+// ---- Guia de Áudio (Audio Guidance) --------------------------------
+// A leitura por voz nativa da TV só é permitida a apps quando o usuário
+// habilitou o Guia de Áudio (Acessibilidade). Consultamos essa flag.
+
+let audioGuidance = null;
+
+export function checkAudioGuidance() {
+	return new Promise((resolve) => {
+		if (audioGuidance !== null) { resolve(audioGuidance); return; }
+		if (!isWebOS()) { audioGuidance = false; resolve(false); return; }
+		try {
+			new LS2Request().send({
+				service: 'luna://com.webos.settingsservice',
+				method: 'getSystemSettings',
+				subscribe: true,
+				parameters: {keys: ['audioGuidance'], category: 'option'},
+				onSuccess: (res) => {
+					audioGuidance = !!(res && res.settings && res.settings.audioGuidance === 'on');
+					resolve(audioGuidance);
+				},
+				onFailure: () => { audioGuidance = false; resolve(false); }
+			});
+		} catch (e) {
+			audioGuidance = false;
+			resolve(false);
+		}
+	});
+}
+
+export const isAudioGuidanceOn = () => audioGuidance === true;
+
 // ---- info do dispositivo ------------------------------------------------
 
 let cachedDevice = null;
@@ -97,35 +128,10 @@ export function showNativeToast(message) {
 		.catch(() => {});
 }
 
-// ---- TTS nativo (Luna) --------------------------------------------
-
-let ttsRequest = null;
-
-export function speakLunaNative(text, callback) {
-	if (!isWebOS()) { if (callback) callback(false); return; }
-
-	let done = false;
-	const finish = (ok) => { if (!done) { done = true; if (callback) callback(ok); } };
-
-	try {
-		ttsRequest = new LS2Request().send({
-			service: 'luna://com.webos.service.tts',
-			method: 'speak',
-			parameters: {text, language: 'pt-BR', clear: true},
-			onSuccess: (res) => finish(res.returnValue !== false),
-			onFailure: () => finish(false)
-		});
-		// a fala continua em background; considera OK apos iniciar
-		setTimeout(() => finish(true), 800);
-	} catch (e) {
-		finish(false);
-	}
-}
+// ---- parar o TTS nativo (Luna) -----------------------------------
+// A fala é disparada pelo Guia de Áudio (services/speech.js -> readAlert);
+// aqui só interrompe.
 
 export function stopLunaNativeTTS() {
-	if (ttsRequest && ttsRequest.cancel) {
-		try { ttsRequest.cancel(); } catch (e) { /* ignora */ }
-		ttsRequest = null;
-	}
-	luna('com.webos.service.tts', 'stop', {}).catch(() => {});
+	luna('com.webos.service.tts', 'stop', {fadeOut: true}).catch(() => {});
 }

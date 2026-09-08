@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Scroller from '@enact/ui/Scroller';
+import { useAnnounce } from '@enact/ui/AnnounceDecorator';
 
 import {
+  checkAudioGuidance,
   fetchInstalledTVApps,
   getDeviceInfo,
   isWebOS,
@@ -9,7 +11,7 @@ import {
 } from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
 import { formatMarkdown } from '../services/format';
-import { speak, stopSpeech, unlockAudio } from '../services/speech';
+import { setAnnouncer, speak, stopSpeech, unlockAudio } from '../services/speech';
 import { connectSync, getDeviceCode } from '../services/sync';
 import AuraButton from '../components/AuraButton';
 import ConfigModal from '../components/ConfigModal';
@@ -58,6 +60,8 @@ const MainPanel = () => {
   const [showAccount, setShowAccount] = useState(false);
   const [device, setDevice] = useState(null);
   const [syncStatus, setSyncStatus] = useState('offline');
+
+  const { announce, children: announceChildren } = useAnnounce();
 
   const recognitionRef = useRef(null);
   const watchdogRef = useRef(null);
@@ -206,6 +210,8 @@ const MainPanel = () => {
 
   // --- webOS: device, apps, teclas do controle ---------------------
   useEffect(() => {
+    setAnnouncer(announce);
+    checkAudioGuidance();
     getDeviceInfo((info) => { setDevice(info); console.log('webOS device:', info); });
     fetchInstalledTVApps((apps, summary) => console.log(`webOS: ${apps.length} apps`, summary));
 
@@ -304,22 +310,23 @@ const MainPanel = () => {
       {/* ---------- Conteúdo ---------- */}
       <main className="aura-main">
         <div className="aura-orb-wrap">
-          <div className={`ai-orb ${orbState}`}>
+          <div className={`ai-orb ${orbState}`} aria-hidden="true">
             <div className="orb-core" />
             <div className="orb-ring ring-1" />
             <div className="orb-ring ring-2" />
           </div>
-          <div className="aura-status">{status}</div>
+          <div className="aura-status" role="status" aria-live="polite">{status}</div>
         </div>
 
         {/* Barra de pergunta */}
         <div className="aura-searchbox">
-          <AuraButton className="pill" onClick={toggleVoice}>
+          <AuraButton className="pill" onClick={toggleVoice} aria-label={orbState === 'listening' ? 'Parar gravação de voz' : 'Falar por voz'}>
             {orbState === 'listening' ? '● Gravando' : 'Falar'}
           </AuraButton>
           <input
             type="text"
             className="spottable aura-input"
+            aria-label="Digite sua pergunta"
             placeholder="Fale ou digite sua pergunta aqui..."
             value={query}
             autoComplete="off"
@@ -348,19 +355,25 @@ const MainPanel = () => {
 
         {/* Resposta */}
         {response && (
-          <div className="aura-response" ref={responseRef}>
+          <div
+            className="aura-response"
+            ref={responseRef}
+            role="region"
+            aria-label={`Resposta do Aura IA via ${response.providerName}`}
+          >
             <div className="aura-response-head">
               <span className="aura-response-title">
                 <ProviderIcon provider={provider} size={18} /> Resposta do Aura IA ({response.providerName})
               </span>
               <div className="aura-response-actions">
-                <AuraButton className="pill" onClick={replaySpeech}>Ouvir Novamente</AuraButton>
-                <AuraButton className="pill" onClick={handleStopSpeech}>Parar Voz</AuraButton>
+                <AuraButton className="pill" onClick={replaySpeech} aria-label="Ouvir a resposta novamente">Ouvir Novamente</AuraButton>
+                <AuraButton className="pill" onClick={handleStopSpeech} aria-label="Parar a leitura por voz">Parar Voz</AuraButton>
               </div>
             </div>
             <Scroller className="aura-response-scroller" direction="vertical">
               <div
                 className="aura-response-body"
+                tabIndex={0}
                 // eslint-disable-next-line react/no-danger
                 dangerouslySetInnerHTML={{ __html: formatMarkdown(response.text) }}
               />
@@ -382,6 +395,8 @@ const MainPanel = () => {
       {showConfig && <ConfigModal provider={provider} onProviderChange={setProvider} onClose={closeConfig} />}
       {showMobile && <MobileModal syncStatus={syncStatus} onClose={() => setShowMobile(false)} />}
       {showAccount && <AccountModal onClose={() => setShowAccount(false)} />}
+
+      {announceChildren}
     </div>
   );
 };
