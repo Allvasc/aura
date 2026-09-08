@@ -87,22 +87,67 @@ function googleFallback(text, onState) {
 	playNext(onState);
 }
 
+// Escolhe a melhor voz pt-BR disponível, preferindo vozes femininas.
+const FEMALE_HINTS = /female|mulher|feminin|maria|francisca|luciana|camila|vit[oó]ria|helena|joana|catarina|ang[eé]lica/i;
+const MALE_HINTS = /\bmale\b|homem|masculin|daniel|ricardo|felipe|jo[aã]o|ant[oó]nio/i;
+
+function pickPtBrVoice() {
+	let voices = [];
+	try { voices = window.speechSynthesis.getVoices() || []; } catch (e) { return null; }
+
+	const pt = voices.filter(
+		(v) => /^pt[-_]?BR/i.test(v.lang) || /portugu.s.*brasil/i.test(v.name) || /^pt\b/i.test(v.lang)
+	);
+	if (!pt.length) return null;
+
+	const female = (v) => FEMALE_HINTS.test(v.name);
+	const male = (v) => MALE_HINTS.test(v.name);
+
+	return (
+		pt.find((v) => v.localService && female(v)) ||   // 1) feminina offline (mais confiável)
+		pt.find((v) => /google.*brasil/i.test(v.name)) || // 2) Google pt-BR (feminina, natural, online)
+		pt.find(female) ||                                // 3) qualquer feminina
+		pt.find((v) => !male(v)) ||                        // 4) qualquer que não seja claramente masculina
+		pt[0]
+	);
+}
+
+function speakUtterance(text, onState) {
+	utterance = new window.SpeechSynthesisUtterance(text);
+	utterance.lang = 'pt-BR';
+	utterance.rate = 1;
+	utterance.pitch = 1;
+	const v = pickPtBrVoice();
+	if (v) utterance.voice = v;
+	utterance.onend = () => onState('idle');
+	utterance.onerror = () => googleFallback(text, onState);
+	window.speechSynthesis.speak(utterance);
+}
+
 function webSpeech(text, onState) {
-	if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
-		try {
-			const voices = window.speechSynthesis.getVoices();
-			if (voices && voices.length) {
-				utterance = new window.SpeechSynthesisUtterance(text);
-				utterance.lang = 'pt-BR';
-				utterance.rate = 1;
-				utterance.onend = () => onState('idle');
-				utterance.onerror = () => googleFallback(text, onState);
-				window.speechSynthesis.speak(utterance);
-				return;
-			}
-		} catch (e) { /* cai pro google */ }
+	if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+		googleFallback(text, onState);
+		return;
 	}
-	googleFallback(text, onState);
+	try {
+		if ((window.speechSynthesis.getVoices() || []).length) {
+			speakUtterance(text, onState);
+			return;
+		}
+		// lista de vozes ainda não carregou — espera o evento (até 1s)
+		let done = false;
+		const go = () => {
+			if (done) return;
+			done = true;
+			window.speechSynthesis.removeEventListener('voiceschanged', go);
+			if ((window.speechSynthesis.getVoices() || []).length) speakUtterance(text, onState);
+			else googleFallback(text, onState);
+		};
+		window.speechSynthesis.addEventListener('voiceschanged', go);
+		setTimeout(go, 1000);
+	} catch (e) {
+		googleFallback(text, onState);
+	}
 }
 
 // --- API pública -------------------------------------------------
