@@ -1,0 +1,19 @@
+{
+  "id": "com.aura.ia.app",
+  "version": "3.1.0",
+  "vendor": "DevIA",
+  "type": "web",
+  "main": "index.html",
+  "title": "Aura IA Multi-Engine",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgImage": "bgImage.png",
+  "splashBackground": "splash.png",
+  "description": "O Aura IA Multi-Engine permite escolher entre 3 das maiores Inteligências Artificiais do mundo: Google Gemini, OpenAI ChatGPT e Anthropic Claude na sua Smart TV LG.",
+  "category": "Entertainment",
+  "uiRevision": "2",
+  "iconColor": "#00f2fe",
+  "transparent": false,
+  "deletable": true,
+  "supportGip": true
+}
