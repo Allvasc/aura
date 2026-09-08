@@ -69,7 +69,7 @@ export async function fetchAIResponse(provider, query) {
 }
 
 async function fetchGemini(query) {
-  const apiKey = localStorage.getItem('key_gemini');
+  const apiKey = window.localStorage.getItem('key_gemini');
   if (!apiKey) {
     return 'Para usar o Google Gemini, insira sua chave no menu de configurações!';
   }
@@ -93,7 +93,7 @@ async function fetchGemini(query) {
 }
 
 async function fetchChatGPT(query) {
-  const apiKey = localStorage.getItem('key_chatgpt');
+  const apiKey = window.localStorage.getItem('key_chatgpt');
   if (!apiKey) {
     return 'Para usar o OpenAI ChatGPT, insira sua chave no menu de configurações!';
   }
@@ -122,7 +122,7 @@ async function fetchChatGPT(query) {
 }
 
 async function fetchClaude(query) {
-  const apiKey = localStorage.getItem('key_claude');
+  const apiKey = window.localStorage.getItem('key_claude');
   if (!apiKey) {
     return 'Para usar o Anthropic Claude, insira sua chave no menu de configurações!';
   }

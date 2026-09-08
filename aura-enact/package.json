@@ -1,13 +1,14 @@
 {
 	"name": "aura-enact",
-	"version": "1.0.0",
-	"description": "A general template for an Enact Limestone application.",
-	"author": "",
+	"version": "4.0.1",
+	"description": "Aura IA Enact - assistente nativo (React + Spotlight) para Smart TV LG webOS",
+	"author": "DevIA",
 	"main": "src/index.js",
 	"scripts": {
 		"serve": "enact serve",
 		"pack": "enact pack",
 		"pack-p": "enact pack -p",
+		"pack-webos": "enact pack -p && ares-package ./dist -o ./bin",
 		"watch": "enact pack --watch",
 		"clean": "enact clean",
 		"lint": "enact lint .",
@@ -19,8 +20,11 @@
 	"private": true,
 	"repository": "",
 	"enact": {
-		"theme": "limestone"
+		"theme": "sandstone"
 	},
+	"browserslist": [
+		"Chrome >= 68"
+	],
 	"eslintConfig": {
 		"extends": "enact-proxy"
 	},
@@ -30,18 +34,20 @@
 		"dist/*"
 	],
 	"dependencies": {
-		"@enact/core": "^5.5.1",
-		"@enact/i18n": "^5.5.1",
-		"@enact/limestone": "^1.10.1",
-		"@enact/spotlight": "^5.5.1",
-		"@enact/ui": "^5.5.1",
-		"ilib": "^14.22.0",
+		"@enact/core": "^4.9.8",
+		"@enact/i18n": "^4.9.8",
+		"@enact/sandstone": "^2.9.13",
+		"@enact/spotlight": "^4.9.8",
+		"@enact/ui": "^4.9.8",
+		"@enact/webos": "^4.9.8",
+		"core-js": "^3.22.8",
+		"ilib": "^14.21.2",
 		"prop-types": "^15.8.1",
-		"react": "^19.2.6",
-		"react-dom": "^19.2.6",
-		"web-vitals": "^5.2.0"
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1"
 	},
 	"devDependencies": {
+		"@enact/cli": "^6.1.4",
 		"eslint-config-enact-proxy": "^1.0.9"
 	}
 }

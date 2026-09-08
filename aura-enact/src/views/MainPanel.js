@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import kind from '@enact/core/kind';
-import { Panel, Header } from '@enact/limestone/Panels';
-import Button from '@enact/limestone/Button';
-import Input from '@enact/limestone/Input';
-import Scroller from '@enact/limestone/Scroller';
+import { Panel, Header } from '@enact/sandstone/Panels';
+import Button from '@enact/sandstone/Button';
+import Input from '@enact/sandstone/Input';
+import Scroller from '@enact/sandstone/Scroller';
 
 import { fetchInstalledTVApps, speakLunaNative, stopLunaNativeTTS } from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
@@ -14,7 +13,6 @@ const MainPanel = () => {
   const [status, setStatus] = useState('Pronto! Faça uma pergunta por voz ou escolha um atalho...');
   const [orbState, setOrbState] = useState('idle');
   const [response, setResponse] = useState(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
     fetchInstalledTVApps((apps, summary) => {
@@ -62,55 +60,59 @@ const MainPanel = () => {
     setOrbState('idle');
   };
 
+  const handleQueryChange = (ev) => setQuery(ev.value);
+  const handleAsk = () => handleSend(query);
+
+  // Nota: layout evita `gap` em flexbox (sem suporte no Chrome 68 / webOS 5);
+  // o espacamento e feito com margin nos filhos.
+  const shortcuts = [
+    ['🍲 Ideias de Jantar', 'Me dê 3 ideias de jantares rápidos e deliciosos para fazer hoje em casa.'],
+    ['✨ Curiosidade do Dia', 'Me conte uma curiosidade incrível e fascinante sobre o universo ou a ciência.'],
+    ['📖 História Curta', 'Me conte uma história curta, divertida e envolvente para ler antes de dormir.'],
+    ['🎬 O que Assistir', 'Me dê 3 sugestões de filmes ou séries de suspense ou ficção científica para assistir na TV.']
+  ];
+
   return (
-    <Panel style={{ padding: '30px 40px' }}>
+    <Panel>
       <Header
         title="AURA IA"
         subtitle={`Provedor Ativo: ${provider.toUpperCase()}`}
       />
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '30px', margin: '30px 0' }}>
-        {/* Esfera de IA Animada */}
-        <div className={`ai-orb ${orbState}`} style={{ textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', maxWidth: '1400px', margin: '0 auto' }}>
+        <div className={`ai-orb ${orbState}`} style={{ margin: '24px 0' }}>
           <div style={{ fontSize: '1.4rem', color: '#94a3b8' }}>{status}</div>
         </div>
 
-        {/* Input Bar */}
-        <div style={{ display: 'flex', gap: '20px', width: '100%', maxWidth: '900px' }}>
+        {/* Barra de pergunta */}
+        <div style={{ margin: '24px 0' }}>
           <Input
             placeholder="Digite ou fale sua pergunta aqui..."
             value={query}
-            onChange={(e) => setQuery(e.value)}
-            style={{ flex: 1 }}
+            onChange={handleQueryChange}
+            style={{ width: '900px', maxWidth: '80%' }}
           />
-          <Button onClick={() => handleSend(query)}>Perguntar</Button>
+          <Button onClick={handleAsk} style={{ marginLeft: '16px' }}>Perguntar</Button>
         </div>
 
-        {/* Shortcuts */}
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Button onClick={() => { setQuery('Ideias de jantar'); handleSend('Ideias de jantar'); }}>
-            🍲 Ideias de Jantar
-          </Button>
-          <Button onClick={() => { setQuery('Curiosidade do dia'); handleSend('Curiosidade do dia'); }}>
-            ✨ Curiosidade do Dia
-          </Button>
-          <Button onClick={() => { setQuery('História curta'); handleSend('História curta'); }}>
-            📖 História Curta
-          </Button>
-          <Button onClick={() => { setQuery('O que assistir na TV'); handleSend('O que assistir na TV'); }}>
-            🎬 O que Assistir
-          </Button>
+        {/* Atalhos rapidos */}
+        <div style={{ margin: '24px 0' }}>
+          {shortcuts.map(([label, prompt]) => (
+            <Button key={label} onClick={() => handleSend(prompt)} style={{ margin: '8px' }}>
+              {label}
+            </Button>
+          ))}
         </div>
 
-        {/* Provider Switcher */}
-        <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
-          <Button selected={provider === 'gemini'} onClick={() => setProvider('gemini')}>
+        {/* Troca de provedor */}
+        <div style={{ margin: '24px 0' }}>
+          <Button selected={provider === 'gemini'} onClick={() => setProvider('gemini')} style={{ margin: '8px' }}>
             Google Gemini
           </Button>
-          <Button selected={provider === 'chatgpt'} onClick={() => setProvider('chatgpt')}>
+          <Button selected={provider === 'chatgpt'} onClick={() => setProvider('chatgpt')} style={{ margin: '8px' }}>
             OpenAI ChatGPT
           </Button>
-          <Button selected={provider === 'claude'} onClick={() => setProvider('claude')}>
+          <Button selected={provider === 'claude'} onClick={() => setProvider('claude')} style={{ margin: '8px' }}>
             Anthropic Claude
           </Button>
         </div>
@@ -118,18 +120,20 @@ const MainPanel = () => {
         {/* Resposta */}
         {response && (
           <div style={{
-            width: '100%',
-            maxWidth: '900px',
+            width: '900px',
+            maxWidth: '90%',
+            margin: '0 auto',
+            textAlign: 'left',
             background: 'rgba(15, 23, 42, 0.9)',
             border: '1px solid #00f2fe',
             borderRadius: '20px',
             padding: '30px'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <div style={{ marginBottom: '20px' }}>
               <span style={{ color: '#00f2fe', fontWeight: 'bold', fontSize: '1.3rem' }}>
                 {response.providerName}
               </span>
-              <Button onClick={handleStopSpeech}>Parar Voz</Button>
+              <Button onClick={handleStopSpeech} style={{ marginLeft: '16px' }}>Parar Voz</Button>
             </div>
             <Scroller style={{ height: '260px' }}>
               <div style={{ fontSize: '1.3rem', lineHeight: '1.8', color: '#e2e8f0' }}>

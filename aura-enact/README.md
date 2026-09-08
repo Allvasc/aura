@@ -1,7 +1,49 @@
 This project was bootstrapped with [@enact/cli](https://github.com/enactjs/cli).
 
-Below you will find some information on how to perform common tasks.
-You can find the most recent version of this guide [here](https://github.com/enactjs/templates/blob/master/packages/limestone/template/README.md).
+## Stack / alvo de compatibilidade
+
+Este app roda em **Smart TV LG webOS 5.x (Chromium 68)**. Para isso a stack foi
+fixada em:
+
+| Pacote | Versao | Motivo |
+|---|---|---|
+| `@enact/core` / `ui` / `spotlight` / `i18n` / `webos` | `^4.9.8` | Ultima linha Enact 4 (React 18) |
+| `@enact/sandstone` | `^2.9.13` | Tema oficial de TV LG compativel com Enact 4 |
+| `react` / `react-dom` | `^18.3.1` | React 19 exige Chromium ~90+, nao roda em webOS 5 |
+| `@enact/cli` | `^6.1.4` | CLI que transpila para o `browserslist` do projeto |
+| `core-js` | `^3.22.8` | Polyfills (importado em `src/index.js`) |
+
+O `browserslist` em `package.json` esta travado em `Chrome >= 68`. **Nao suba**
+para Enact 5 / React 19 / limestone sem trocar de TV — foi exatamente isso que
+causava a tela preta no boot.
+
+- webOS 6.x (Chrome 79) tambem roda esta build.
+- webOS 4.0 (Chrome 53) **nao** e suportado (precisaria de Enact 3 + Moonstone).
+
+## Metadados webOS
+
+`webos-meta/appinfo.json` (+ icones) e copiado para `dist/` no build. E o que
+faz o `enact pack` compilar em modo webOS.
+
+## Gerar o pacote .ipk
+
+```sh
+npm install
+npm run pack-webos      # enact pack -p  +  ares-package ./dist -o ./bin
+```
+
+Saida: `bin/com.aura.ia.app_4.0.1_all.ipk`
+
+Instalar na TV (com Developer Mode ativo e IP pareado no ares):
+
+```sh
+ares-install ./bin/com.aura.ia.app_4.0.1_all.ipk
+ares-launch com.aura.ia.app
+ares-inspect com.aura.ia.app --open   # abre o DevTools remoto para debugar
+```
+
+---
+
 Additional documentation on @enact/cli can be found [here](https://github.com/enactjs/cli/blob/master/docs/index.md).
 
 ## Folder Structure

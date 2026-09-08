@@ -1,18 +1,27 @@
-import { createRoot } from 'react-dom/client';
+/* global ENACT_PACK_ISOMORPHIC */
+import 'core-js/stable';
+import {createRoot, hydrateRoot} from 'react-dom/client';
+
 import App from './App';
 
-if (typeof window !== 'undefined') {
-  const container = document.getElementById('root');
-  if (container) {
-    const root = createRoot(container);
-    root.render(<App />);
-  }
+const appElement = (<App />);
 
-  // Notifica o sistema operacional da TV LG webOS que o app está pronto (evita tela preta no boot)
-  if (window.webOSSystem && window.webOSSystem.stageReady) {
-    window.webOSSystem.stageReady();
-  }
-  document.dispatchEvent(new CustomEvent('webOSLaunch'));
+// Em ambiente de navegador (a TV), renderiza; no build isomórfico apenas exporta.
+if (typeof window !== 'undefined') {
+	const container = document.getElementById('root');
+
+	if (container) {
+		if (typeof ENACT_PACK_ISOMORPHIC !== 'undefined' && ENACT_PACK_ISOMORPHIC) {
+			hydrateRoot(container, appElement);
+		} else {
+			createRoot(container).render(appElement);
+		}
+	}
+
+	// webOS: avisa o sistema da TV LG que a UI está pronta (evita tela preta no boot)
+	if (window.webOSSystem && typeof window.webOSSystem.stageReady === 'function') {
+		window.webOSSystem.stageReady();
+	}
 }
 
-export default App;
+export default appElement;
