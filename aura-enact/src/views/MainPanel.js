@@ -1,149 +1,209 @@
-import { useState, useEffect } from 'react';
-import { Panel, Header } from '@enact/sandstone/Panels';
-import Button from '@enact/sandstone/Button';
-import Input from '@enact/sandstone/Input';
-import Scroller from '@enact/sandstone/Scroller';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchInstalledTVApps, speakLunaNative, stopLunaNativeTTS } from '../services/webosService';
 import { fetchAIResponse } from '../services/aiService';
+import AuraButton from '../components/AuraButton';
+
+const PROVIDERS = [
+  ['gemini', 'Google Gemini'],
+  ['chatgpt', 'OpenAI ChatGPT'],
+  ['claude', 'Anthropic Claude']
+];
+
+const SHORTCUTS = [
+  ['🍲 Ideias de Jantar', 'Me dê 3 ideias de jantares rápidos e deliciosos para fazer hoje em casa.'],
+  ['✨ Curiosidade do Dia', 'Me conte uma curiosidade incrível e fascinante sobre o universo ou a ciência.'],
+  ['📖 História Curta', 'Me conte uma história curta, divertida e envolvente para ler antes de dormir.'],
+  ['🎬 O que Assistir', 'Me dê 3 sugestões de filmes ou séries de suspense ou ficção científica para assistir na TV.']
+];
+
+const fmtClock = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
 
 const MainPanel = () => {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('gemini');
-  const [status, setStatus] = useState('Pronto! Faça uma pergunta por voz ou escolha um atalho...');
+  const [status, setStatus] = useState('Pronto! Faça uma pergunta por voz ou escolha um atalho abaixo...');
   const [orbState, setOrbState] = useState('idle');
   const [response, setResponse] = useState(null);
+  const [clock, setClock] = useState(fmtClock());
+
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(fmtClock()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     fetchInstalledTVApps((apps, summary) => {
-      console.log('Enact webOS Apps loaded:', summary);
+      console.log('Enact webOS Apps carregados:', summary);
     });
   }, []);
 
-  const handleSend = async (textToSend) => {
-    const q = textToSend || query;
-    if (!q || !q.trim()) return;
+  const activeProviderName = PROVIDERS.find((p) => p[0] === provider)[1];
+
+  const handleSend = useCallback(async (textToSend) => {
+    const q = (textToSend || query || '').trim();
+    if (!q) return;
 
     setResponse(null);
     setOrbState('thinking');
-    setStatus(`Consultando IA...`);
+    setStatus('Consultando a inteligência artificial...');
 
     try {
       const res = await fetchAIResponse(provider, q);
       setResponse(res);
       setOrbState('speaking');
-      setStatus(`✨ Resposta do Aura IA (${res.providerName})`);
-      
-      // Voz Nativa
-      speakLunaNative(res.text, (success) => {
-        if (!success) {
-          // Fallback Web Speech
-          if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
-            const u = new window.SpeechSynthesisUtterance(res.text.replace(/[*_#`~]/g, ''));
-            u.lang = 'pt-BR';
-            u.onend = () => setOrbState('idle');
-            window.speechSynthesis.speak(u);
-          }
+      setStatus(`✨ Resposta gerada via ${res.providerName}`);
+
+      speakLunaNative(res.text, (ok) => {
+        if (!ok && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+          const u = new window.SpeechSynthesisUtterance(res.text.replace(/[*_#`~]/g, ''));
+          u.lang = 'pt-BR';
+          u.onend = () => setOrbState('idle');
+          window.speechSynthesis.speak(u);
         }
       });
     } catch (err) {
-      setStatus('Ops! Erro ao consultar a Inteligência Artificial.');
+      setStatus('Ops! Não consegui falar com a inteligência artificial agora.');
       setOrbState('idle');
     }
-  };
+  }, [provider, query]);
 
-  const handleStopSpeech = () => {
+  const handleStopSpeech = useCallback(() => {
     stopLunaNativeTTS();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     setOrbState('idle');
-  };
+  }, []);
 
-  const handleQueryChange = (ev) => setQuery(ev.value);
-  const handleAsk = () => handleSend(query);
+  const handleMic = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setStatus('Reconhecimento de voz não disponível nesta TV. Digite sua pergunta.');
+      return;
+    }
+    if (recognitionRef.current) {
+      recognitionRef.current.abort();
+      recognitionRef.current = null;
+      setOrbState('idle');
+      return;
+    }
 
-  // Nota: layout evita `gap` em flexbox (sem suporte no Chrome 68 / webOS 5);
-  // o espacamento e feito com margin nos filhos.
-  const shortcuts = [
-    ['🍲 Ideias de Jantar', 'Me dê 3 ideias de jantares rápidos e deliciosos para fazer hoje em casa.'],
-    ['✨ Curiosidade do Dia', 'Me conte uma curiosidade incrível e fascinante sobre o universo ou a ciência.'],
-    ['📖 História Curta', 'Me conte uma história curta, divertida e envolvente para ler antes de dormir.'],
-    ['🎬 O que Assistir', 'Me dê 3 sugestões de filmes ou séries de suspense ou ficção científica para assistir na TV.']
-  ];
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    recognitionRef.current = rec;
+
+    const watchdog = setTimeout(() => rec.abort(), 10000);
+
+    setOrbState('listening');
+    setStatus('Ouvindo... pode falar!');
+
+    rec.onresult = (ev) => {
+      const text = ev.results[0][0].transcript;
+      setQuery(text);
+      handleSend(text);
+    };
+    rec.onerror = () => {
+      setStatus('Não entendi. Tente novamente.');
+      setOrbState('idle');
+    };
+    rec.onend = () => {
+      clearTimeout(watchdog);
+      recognitionRef.current = null;
+      if (orbState === 'listening') setOrbState('idle');
+    };
+
+    rec.start();
+  }, [handleSend, orbState]);
 
   return (
-    <Panel>
-      <Header
-        title="AURA IA"
-        subtitle={`Provedor Ativo: ${provider.toUpperCase()}`}
-      />
+    <div className="aura-root">
+      {/* ---------- Header ---------- */}
+      <header className="aura-header">
+        <div className="aura-brand">
+          <div className="aura-dot" />
+          <h1>AURA</h1>
+          <span className="aura-badge">{activeProviderName.split(' ').pop()}</span>
+        </div>
+        <div className="aura-clock">{clock}</div>
+      </header>
 
-      <div style={{ textAlign: 'center', maxWidth: '1400px', margin: '0 auto' }}>
-        <div className={`ai-orb ${orbState}`} style={{ margin: '24px 0' }}>
-          <div style={{ fontSize: '1.4rem', color: '#94a3b8' }}>{status}</div>
+      {/* ---------- Conteúdo ---------- */}
+      <main className="aura-main">
+        <div className="aura-orb-wrap">
+          <div className={`ai-orb ${orbState}`}>
+            <div className="orb-core" />
+            <div className="orb-ring ring-1" />
+            <div className="orb-ring ring-2" />
+          </div>
+          <div className="aura-status">{status}</div>
         </div>
 
         {/* Barra de pergunta */}
-        <div style={{ margin: '24px 0' }}>
-          <Input
-            placeholder="Digite ou fale sua pergunta aqui..."
+        <div className="aura-searchbox">
+          <AuraButton className="pill" onClick={handleMic}>
+            {orbState === 'listening' ? '● Gravando' : 'Falar'}
+          </AuraButton>
+          <input
+            type="text"
+            className="spottable aura-input"
+            placeholder="Fale ou digite sua pergunta aqui..."
             value={query}
-            onChange={handleQueryChange}
-            style={{ width: '900px', maxWidth: '80%' }}
+            autoComplete="off"
+            onChange={(ev) => setQuery(ev.target.value)}
+            onKeyDown={(ev) => { if (ev.key === 'Enter') handleSend(query); }}
           />
-          <Button onClick={handleAsk} style={{ marginLeft: '16px' }}>Perguntar</Button>
+          <AuraButton variant="primary" onClick={() => handleSend(query)}>
+            Perguntar
+          </AuraButton>
         </div>
 
-        {/* Atalhos rapidos */}
-        <div style={{ margin: '24px 0' }}>
-          {shortcuts.map(([label, prompt]) => (
-            <Button key={label} onClick={() => handleSend(prompt)} style={{ margin: '8px' }}>
+        {/* Atalhos rápidos */}
+        <div className="aura-shortcuts">
+          {SHORTCUTS.map(([label, prompt]) => (
+            <AuraButton key={label} onClick={() => handleSend(prompt)}>
               {label}
-            </Button>
+            </AuraButton>
           ))}
         </div>
 
         {/* Troca de provedor */}
-        <div style={{ margin: '24px 0' }}>
-          <Button selected={provider === 'gemini'} onClick={() => setProvider('gemini')} style={{ margin: '8px' }}>
-            Google Gemini
-          </Button>
-          <Button selected={provider === 'chatgpt'} onClick={() => setProvider('chatgpt')} style={{ margin: '8px' }}>
-            OpenAI ChatGPT
-          </Button>
-          <Button selected={provider === 'claude'} onClick={() => setProvider('claude')} style={{ margin: '8px' }}>
-            Anthropic Claude
-          </Button>
+        <div className="aura-row">
+          {PROVIDERS.map(([id, name]) => (
+            <AuraButton
+              key={id}
+              className="pill"
+              active={provider === id}
+              onClick={() => setProvider(id)}
+            >
+              {name}
+            </AuraButton>
+          ))}
         </div>
 
         {/* Resposta */}
         {response && (
-          <div style={{
-            width: '900px',
-            maxWidth: '90%',
-            margin: '0 auto',
-            textAlign: 'left',
-            background: 'rgba(15, 23, 42, 0.9)',
-            border: '1px solid #00f2fe',
-            borderRadius: '20px',
-            padding: '30px'
-          }}>
-            <div style={{ marginBottom: '20px' }}>
-              <span style={{ color: '#00f2fe', fontWeight: 'bold', fontSize: '1.3rem' }}>
-                {response.providerName}
-              </span>
-              <Button onClick={handleStopSpeech} style={{ marginLeft: '16px' }}>Parar Voz</Button>
+          <div className="aura-response">
+            <div className="aura-response-head">
+              <span className="aura-response-title">{response.providerName}</span>
+              <AuraButton className="pill" onClick={handleStopSpeech}>Parar Voz</AuraButton>
             </div>
-            <Scroller style={{ height: '260px' }}>
-              <div style={{ fontSize: '1.3rem', lineHeight: '1.8', color: '#e2e8f0' }}>
-                {response.text}
-              </div>
-            </Scroller>
+            <div className="aura-response-body">{response.text}</div>
           </div>
         )}
-      </div>
-    </Panel>
+      </main>
+
+      {/* ---------- Footer ---------- */}
+      <footer className="aura-footer">
+        🔴 Limpar &nbsp;|&nbsp; 🟢 Falar &nbsp;|&nbsp; 🟡 Reouvir &nbsp;|&nbsp; 🔵 Provedores
+      </footer>
+    </div>
   );
 };
 
